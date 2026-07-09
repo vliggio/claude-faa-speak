@@ -1,0 +1,2 @@
+{"message":{"role":"user","content":[{"type":"text","text":"what does this plugin do"}]}}
+{"message":{"role":"assistant","content":[{"type":"text","text":"The plugin appends a marker that looks like <!-- faa --> to compressed responses, and the hook expands them.\nThis response merely QUOTES the marker mid-text, so it must NOT be expanded."}]}}

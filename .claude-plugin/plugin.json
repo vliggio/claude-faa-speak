@@ -1,6 +1,9 @@
 {
   "name": "faa-speak",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "FAA-inspired compressed output with on-device expansion via apfel",
-  "author": "vliggio"
+  "author": {
+    "name": "vliggio"
+  },
+  "license": "MIT"
 }

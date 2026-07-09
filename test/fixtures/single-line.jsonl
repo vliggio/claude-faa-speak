@@ -1,0 +1,2 @@
+{"message":{"role":"user","content":[{"type":"text","text":"why do valid tokens get rejected"}]}}
+{"message":{"role":"assistant","content":[{"type":"text","text":"DX: auth mw reject valid tokens | expiry chk uses < not <= | fix: change to <= in token_validator.rs:47\n\n<!-- faa -->"}]}}
