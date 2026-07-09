@@ -46,8 +46,9 @@ claude --print --plugin-dir . "/faa-speak explain database connection pooling"
 # Live end-to-end (requires apfel built):
 ./scripts/faa-wrap.sh "explain database connection pooling"
 
-# Token-savings measurement (unverified claim until run):
+# Token-savings measurement (README carries the latest measured number):
 ./scripts/bench.sh
+./scripts/bench.sh --ab   # + no-dictionary arm (bench/nodict-plugin) — issue #10 dictionary A/B
 ```
 
 ## Prerequisites

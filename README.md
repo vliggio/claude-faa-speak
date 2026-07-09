@@ -19,7 +19,7 @@ You (normal English)
 2. **Claude responds compressed** using 40 standard abbreviations, structural prefixes (`DX:` for diagnosis, `EX:` for explanation, `ARCH:` for architecture), and telegraphic style.
 3. **The Stop hook fires**, extracts the compressed text, expands the prose through apfel, and shows the readable English below the response as a system message. Code blocks, fences, and their contents are never sent through the expander.
 
-Measured savings: **~52% of output tokens** on the three bundled benchmark prompts (range 39–59%; single `scripts/bench.sh` run, 2026-07-09). Run `scripts/bench.sh` with your own prompts before relying on the number for your workload.
+Measured savings: **~52% of output tokens** on the three bundled benchmark prompts (range 39–59%; single `scripts/bench.sh` run, 2026-07-09). Run `scripts/bench.sh` with your own prompts before relying on the number for your workload. `scripts/bench.sh --ab` adds a third arm — the same style with the abbreviation dictionary removed — to isolate how much the table contributes beyond telegraphic phrasing.
 
 > **Scope notes:** expansion runs for the main conversation only (subagent output is not expanded), and the on-device expansion is best-effort — if apfel fails or is missing, you simply see the compressed text.
 
