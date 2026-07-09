@@ -1,38 +1,50 @@
 #!/usr/bin/env bash
-# faa-wrap: Standalone wrapper for claude --print with faa-speak expansion.
-# Captures Claude's compressed output and expands via apfel.
+# faa-wrap: non-interactive faa-speak — runs `claude --print` with the plugin
+# loaded and the /faa-speak skill invoked, then expands the compressed reply
+# via apfel (code blocks pass through the shared splitter untouched).
 #
 # Usage:
 #   faa-wrap.sh "explain database connection pooling"
-#   faa-wrap.sh -p "custom system prompt" "your question"
 #   echo "context" | faa-wrap.sh "summarize this"
-
+#
+# Env:
+#   APFEL=/path/to/apfel      override apfel discovery
+#   FAA_SHOW_COMPRESSED=1     print the raw compressed reply before the expansion
 set -euo pipefail
 
-# Locate apfel
-APFEL="${APFEL:-}"
-if [[ -z "$APFEL" ]]; then
-  if command -v apfel &>/dev/null; then
-    APFEL="apfel"
-  elif [[ -x "$HOME/git/apfel/.build/release/apfel" ]]; then
-    APFEL="$HOME/git/apfel/.build/release/apfel"
-  else
-    echo "Error: apfel not found. Build it: cd ~/git/apfel && swift build -c release" >&2
-    exit 1
-  fi
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PLUGIN_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+# shellcheck source=../lib/expansion.sh
+. "$PLUGIN_ROOT/lib/expansion.sh"
+
+if ! command -v claude >/dev/null 2>&1; then
+  printf 'Error: claude CLI not found in PATH.\n' >&2
+  exit 1
+fi
+if ! faa_locate_apfel >/dev/null; then
+  printf 'Error: apfel not found. Build it:\n' >&2
+  printf '  git clone https://github.com/vliggio/apfel ~/git/apfel && cd ~/git/apfel && swift build -c release\n' >&2
+  exit 1
+fi
+if [ $# -lt 1 ]; then
+  printf 'Usage: faa-wrap.sh "your question"\n' >&2
+  exit 1
 fi
 
-EXPANSION_PROMPT='Expand abbreviated technical text to clear English.
-Abbreviations: fn=function ret=return impl=implementation cfg=configuration db=database auth=authentication req=request res=response err=error dep=dependency pkg=package env=environment srv=server param=parameter val=value var=variable obj=object arr=array str=string mw=middleware endpt=endpoint hdr=header cmp=component rdr=render cb=callback init=initialize del=delete upd=update chk=check vld=validate idx=index iter=iteration tpl=template cmp=component evnt=event sig=signal bool=boolean int=integer async=asynchronous msg=message
-Arrows (→) mean "leads to" or "causes". DX: = diagnosis (symptom|cause|fix). EX: = explanation (what|why|how). ARCH: = architecture (pattern|tradeoff|recommendation).
-Preserve code blocks, file paths, and commands exactly as-is.
-Add articles, conjunctions, and natural phrasing. Do not add opinions or extra information.'
-
-# Capture compressed output from claude
-COMPRESSED=$(claude --print "$@")
+# Load the plugin for this run and invoke the skill explicitly — skills do not
+# auto-trigger in --print mode.
+COMPRESSED=$(claude --print --plugin-dir "$PLUGIN_ROOT" "/faa-speak $*")
 
 if [[ "$COMPRESSED" == *'<!-- faa -->'* ]]; then
-  echo "$COMPRESSED" | sed 's/<!-- faa -->//' | "$APFEL" -s "$EXPANSION_PROMPT"
+  if [ "${FAA_SHOW_COMPRESSED:-0}" = "1" ]; then
+    printf '%s\n\n' "$COMPRESSED"
+  fi
+  TEXT=${COMPRESSED//'<!-- faa -->'/}
+  if ! faa_expand_text "$TEXT"; then
+    # apfel unavailable mid-run — fall back to the compressed reply
+    printf '%s' "$COMPRESSED"
+  fi
+  printf '\n'
 else
-  echo "$COMPRESSED"
+  printf '%s\n' "$COMPRESSED"
 fi
