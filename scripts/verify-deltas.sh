@@ -70,15 +70,34 @@ authz|authorization|candidate
 EOF
 fi
 
+# Invocation mirrors scripts/bench.sh (known-good): no cwd change, no --bare.
+# haiku keeps the run cheap; if the alias is rejected, fall back to the
+# session default model (token counts are what we measure, not quality).
+USE_HAIKU=1
+
+call_claude() { # term -> raw result JSON on stdout, stderr to $TMPD/last.err
+  local term="$1"
+  if [ "$USE_HAIKU" = 1 ]; then
+    claude --print --output-format json --model haiku \
+      "Reply with only the word ok. Vocabulary sample: use $term here." 2>"$TMPD/last.err"
+  else
+    claude --print --output-format json \
+      "Reply with only the word ok. Vocabulary sample: use $term here." 2>"$TMPD/last.err"
+  fi
+}
+
+extract_tokens() { # result-json -> token count or empty
+  jq -r '
+    if .is_error == true then empty
+    else ((.usage.input_tokens // 0) + (.usage.cache_creation_input_tokens // 0) + (.usage.cache_read_input_tokens // 0))
+    end' 2>/dev/null
+}
+
 count() { # term -> total input tokens, or -1 on failure (3 tries)
   local term="$1" out n tries=0
   while [ "$tries" -lt 3 ]; do
-    out=$( (cd "$TMPD" && claude --print --bare --model haiku --output-format json \
-      "Reply with only the word ok. Vocabulary sample: use $term here.") 2>/dev/null ) || out=""
-    n=$(printf '%s' "$out" | jq -r '
-      if .is_error == true then empty
-      else (.usage.input_tokens + .usage.cache_creation_input_tokens + .usage.cache_read_input_tokens)
-      end' 2>/dev/null) || n=""
+    out=$(call_claude "$term") || out=""
+    n=$(printf '%s' "$out" | extract_tokens) || n=""
     if [ -n "$n" ] && [ "$n" -gt 0 ] 2>/dev/null; then
       printf '%s' "$n"
       return 0
@@ -89,12 +108,22 @@ count() { # term -> total input tokens, or -1 on failure (3 tries)
   printf '%s' "-1"
 }
 
-# preflight: fail fast if the CLI is not logged in
-probe=$(count "probe")
-if [ "$probe" = "-1" ]; then
-  printf 'Error: claude --print failed (not logged in?). Run claude and /login first.\n' >&2
+# --- preflight: verify one call works, surfacing the REAL error if not ---
+probe_out=$(call_claude "probe") || probe_out=""
+probe_n=$(printf '%s' "$probe_out" | extract_tokens) || probe_n=""
+if [ -z "$probe_n" ] || ! [ "$probe_n" -gt 0 ] 2>/dev/null; then
+  printf 'haiku-model probe failed; retrying with the default model...\n' >&2
+  USE_HAIKU=0
+  probe_out=$(call_claude "probe") || probe_out=""
+  probe_n=$(printf '%s' "$probe_out" | extract_tokens) || probe_n=""
+fi
+if [ -z "$probe_n" ] || ! [ "$probe_n" -gt 0 ] 2>/dev/null; then
+  printf 'Error: claude --print probe failed. Diagnostics:\n' >&2
+  printf '  result: %s\n' "$(printf '%s' "$probe_out" | jq -r '.result // "no result field"' 2>/dev/null || printf '%.200s' "$probe_out")" >&2
+  printf '  stderr: %s\n' "$(head -c 400 "$TMPD/last.err" 2>/dev/null || echo none)" >&2
   exit 1
 fi
+[ "$USE_HAIKU" = 1 ] || printf 'note: using the default session model (haiku alias rejected)\n' >&2
 
 total=$(grep -c . "$PAIRS")
 printf 'Measuring %s pairs (~%s haiku calls); dots are pairs completing...\n' "$total" "$((total * 2))" >&2
