@@ -1,38 +1,34 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Something broke — compression, expansion, the hook, or the wrapper
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**What happened**
+A clear description of the bug, and what you expected instead.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**To reproduce**
+The prompt / command you ran and what came back. If the problem is in the
+expansion, include the compressed text (the part ending in `<!-- faa -->`).
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**Environment**
+- macOS version:
+- `claude --version`:
+- apfel: [ ] on PATH  [ ] `~/git/apfel/.build/release/apfel`  [ ] `APFEL=` override  [ ] not installed
+- How the plugin is loaded: [ ] `--plugin-dir`  [ ] marketplace install
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**Debug output**
+Re-run with the hook's debug flag and paste the `faa-speak:` lines
+(they explain every silent no-op):
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+```
+FAA_DEBUG=1 claude --debug ...
+```
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
-
-**Additional context**
-Add any other context about the problem here.
+**Does the test suite pass on your machine?**
+```
+bash test/run.sh
+```
