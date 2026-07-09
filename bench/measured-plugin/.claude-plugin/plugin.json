@@ -1,7 +1,7 @@
 {
   "name": "faa-speak-measured",
   "version": "0.2.0",
-  "description": "Benchmark variant of faa-speak with the measured 13-entry dictionary (every entry token-delta >= 1, verify-deltas.sh 2026-07-09)",
+  "description": "Benchmark variant of faa-speak with the measured 34-entry dictionary (every entry token-delta >= 1, verify-deltas.sh 2026-07-09)",
   "author": {
     "name": "vliggio"
   },

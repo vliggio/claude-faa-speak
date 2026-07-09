@@ -2,8 +2,8 @@
 name: faa-speak-measured
 description: >
   Benchmark variant of faa-speak carrying only measured dictionary entries —
-  13 short forms with verified token deltas >= 1 (scripts/verify-deltas.sh,
-  2026-07-09) instead of the legacy 40-entry table. Used via
+  34 short forms with verified token deltas >= 1 (two scripts/verify-deltas.sh
+  runs, 2026-07-09) instead of the legacy 40-entry table. Used via
   scripts/bench.sh --ab to decide whether the measured set replaces the
   shipped dictionary. Not for normal use; invoke via /faa-speak-measured.
 ---
@@ -20,21 +20,25 @@ End every compressed response with `<!-- faa -->` on its own line.
 
 ## Short Forms (all measured: each saves tokens)
 
-| Short | Meaning |
-|-------|---------|
-| async | asynchronous |
-| PR | pull request |
-| regex | regular expression |
-| CI/CD | continuous integration and delivery |
-| LB | load balancer |
-| DR | disaster recovery |
-| SSO | single sign-on |
-| MFA | multi-factor authentication |
-| SLA | service level agreement |
-| RCA | root cause analysis |
-| MTTR | mean time to recovery |
-| HPA | horizontal pod autoscaler |
-| PVC | persistent volume claim |
+| Short | Meaning | | Short | Meaning |
+|-------|---------|---|-------|---------|
+| HPA | horizontal pod autoscaler | | IaaS | infrastructure as a service |
+| ALB | application load balancer | | LB | load balancer |
+| async | asynchronous | | MTTR | mean time to recovery |
+| E2E | end-to-end | | OOM | out of memory |
+| IAM | identity and access management | | PaaS | platform as a service |
+| MFA | multi-factor authentication | | pen test | penetration test |
+| RBAC | role-based access control | | PR | pull request |
+| SSO | single sign-on | | PVC | persistent volume claim |
+| WAF | web application firewall | | RCA | root cause analysis |
+| ACL | access control list | | regex | regular expression |
+| ASG | auto scaling group | | RPO | recovery point objective |
+| canary | canary deployment | | RPS | requests per second |
+| CDN | content delivery network | | RTO | recovery time objective |
+| CI/CD | continuous integration and delivery | | SaaS | software as a service |
+| cron | cron job | | SLA | service level agreement |
+| DR | disaster recovery | | TTL | time to live |
+| VM | virtual machine | | VPC | virtual private cloud |
 
 ## Structural Prefixes
 

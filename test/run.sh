@@ -199,9 +199,8 @@ else
 fi
 MEASSKILL="$MEAS/skills/faa-speak-measured/SKILL.md"
 if grep -qF '<!-- faa -->' "$MEASSKILL" 2>/dev/null; then ok "measured variant keeps the marker contract"; else fail "measured variant keeps the marker contract"; fi
-meas_rows=$(( $(grep -c '^| ' "$MEASSKILL" 2>/dev/null || echo 1) - 1 ))
-prefix_rows=$(grep -cE '^\| .(DX|EX|ARCH)' "$MEASSKILL" 2>/dev/null || true)
-assert_eq "measured variant carries exactly the 13 measured entries" "$((meas_rows - prefix_rows - 1))" "13"
+meas_entries=$(awk -F'|' '/^\| [A-Za-z]/ && $2 !~ /Short|Prefix/ { c += ($2 ~ /[A-Za-z]/) + ($5 ~ /[A-Za-z]/) } END { print c + 0 }' "$MEASSKILL")
+assert_eq "measured variant carries exactly the 34 measured entries" "$meas_entries" "34"
 if bash -n "$ROOT/scripts/bench.sh" 2>/dev/null; then ok "bench.sh parses"; else fail "bench.sh parses"; fi
 if bash -n "$ROOT/scripts/mine-dict.sh" 2>/dev/null; then ok "mine-dict.sh parses"; else fail "mine-dict.sh parses"; fi
 if bash -n "$ROOT/scripts/verify-deltas.sh" 2>/dev/null; then ok "verify-deltas.sh parses"; else fail "verify-deltas.sh parses"; fi
