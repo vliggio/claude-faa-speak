@@ -1,0 +1,5 @@
+# SC1091: lib/expansion.sh is linted directly as its own CI target; don't
+#         require -x source resolution at every `source` site.
+# SC2016: test/run.sh embeds literal markdown ``` fences in single-quoted
+#         printf strings — the backticks are data, not command substitution.
+disable=SC1091,SC2016

@@ -1,0 +1,2 @@
+{"message":{"role":"user","content":[{"type":"text","text":"diagnose and show the fix"}]}}
+{"message":{"role":"assistant","content":[{"type":"text","text":"DX: issue found | cause identified | fix below\nsecond prose line with several more words here\nsee `cfg/db_pool.toml` and rerun `make db-init` after\n\n```bash\ncode line one\ncode line two\n```\ntrailing prose after code block here\n\n<!-- faa -->"}]}}

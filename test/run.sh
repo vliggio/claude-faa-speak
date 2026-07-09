@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# faa-speak test suite — no model in the loop: apfel is stubbed via the APFEL
+# env override, and the claude CLI is shimmed for the wrapper test.
+# Bash 3.2 compatible. Run: bash test/run.sh
+set -u
+
+TEST_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$TEST_DIR/.." && pwd)
+STUB="$TEST_DIR/apfel-stub.sh"
+HOOK="$ROOT/hooks/scripts/expand-output.sh"
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/faa-test.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
+
+PASS=0
+FAIL=0
+ok()   { PASS=$((PASS + 1)); printf 'ok   - %s\n' "$1"; }
+fail() { FAIL=$((FAIL + 1)); printf 'FAIL - %s\n' "$1"; }
+assert_contains() { # name haystack needle
+  case "$2" in *"$3"*) ok "$1" ;; *) fail "$1 (missing: $3)" ;; esac
+}
+assert_empty() { # name value
+  if [ -z "$2" ]; then ok "$1"; else fail "$1 (expected empty, got: ${2:0:80})"; fi
+}
+assert_eq() { # name actual expected
+  if [ "$2" = "$3" ]; then ok "$1"; else fail "$1 (got: ${2:0:120} | want: ${3:0:120})"; fi
+}
+
+# extra stubs
+MARK_STUB="$TMP/apfel-mark"
+printf '#!/usr/bin/env bash\nprintf "\xc2\xabE\xc2\xbb"; cat\n' > "$MARK_STUB"; chmod +x "$MARK_STUB"
+FAIL_STUB="$TMP/apfel-fail"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$FAIL_STUB"; chmod +x "$FAIL_STUB"
+
+run_hook() { # transcript-path [apfel] -> sets HOOK_OUT and HOOK_RC (no subshell at call site)
+  local apfel="${2:-$STUB}"
+  HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$1" | APFEL="$apfel" bash "$HOOK" 2>/dev/null)
+  HOOK_RC=$?
+}
+record_types() { # first char of each \036-separated record
+  awk 'BEGIN { RS = "\036" } length() { printf "%s", substr($0, 1, 1) }'
+}
+sysmsg() { printf '%s' "$1" | jq -r '.systemMessage // ""' 2>/dev/null; }
+
+echo "=== lib: splitter classification ==="
+. "$ROOT/lib/expansion.sh"
+
+recs=$(printf 'prose here\n```js\ncode\n```\nafter\n' | faa_split_segments | record_types)
+assert_eq "splitter tags prose/code/prose" "$recs" "PCP"
+
+recs=$(printf 'list item:\n  ```js\n  indented code\n  ```\ndone\n' | faa_split_segments | record_types)
+case "$recs" in *C*) ok "splitter recognizes indented fences" ;; *) fail "splitter recognizes indented fences (tags: $recs)" ;; esac
+
+echo "=== lib: expansion pipeline (stub = cat) ==="
+export APFEL="$STUB"
+IN=$'DX: issue | cause | fix\nsecond prose line with several more words here\nsee `cfg/db_pool.toml` and rerun `make db-init` after\n\n```bash\ncode line one\ncode line two\n```\ntrailing prose after code block here'
+OUT=$(faa_expand_text "$IN")
+assert_contains "multi-line prose: first line survives"  "$OUT" "DX: issue | cause | fix"
+assert_contains "multi-line prose: second line survives" "$OUT" "second prose line with several more words here"
+assert_contains "inline code spans survive the pipeline (H10 regression)" "$OUT" 'see `cfg/db_pool.toml` and rerun `make db-init` after'
+assert_contains "prose after code block survives"        "$OUT" "trailing prose after code block here"
+CODE_ACTUAL=$(printf '%s\n' "$OUT" | awk '/^[ \t]*```/{print; f=!f; next} f{print}')
+CODE_EXPECT=$'```bash\ncode line one\ncode line two\n```'
+assert_eq "code block byte-identical" "$CODE_ACTUAL" "$CODE_EXPECT"
+
+OUT=$(APFEL="$MARK_STUB" faa_expand_text "tiny msg")
+assert_eq "<=3-word prose skips apfel" "$OUT" "tiny msg"
+
+LONG=""
+i=0
+while [ $i -lt 520 ]; do LONG="${LONG}word$i "; i=$((i + 1)); done
+OUT=$(APFEL="$MARK_STUB" faa_expand_text "$LONG")
+MARKS=$(printf '%s' "$OUT" | grep -o "«E»" | grep -c . )
+if [ "$MARKS" -ge 2 ]; then ok "blank-line-free 520-word wall is hard-flushed into chunks ($MARKS)"; else fail "hard flush (chunks: $MARKS)"; fi
+
+OUT=$(APFEL="$FAIL_STUB" faa_expand_text "apfel died mid run but text must survive fully")
+assert_contains "apfel failure falls back to original text" "$OUT" "apfel died mid run but text must survive fully"
+
+echo "=== hook: end to end (fixtures) ==="
+run_hook "$TEST_DIR/fixtures/single-line.jsonl"
+assert_eq "single-line: exit 0" "$HOOK_RC" "0"
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "single-line: systemMessage delivered" "$MSG" "auth mw reject valid tokens"
+assert_contains "single-line: marker stripped" "x${MSG}x" "token_validator.rs:47"
+case "$MSG" in *'<!-- faa -->'*) fail "single-line: marker stripped from output" ;; *) ok "single-line: marker not echoed back" ;; esac
+
+run_hook "$TEST_DIR/fixtures/multiline-code.jsonl"
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "multiline: second prose line survives (C1 regression)" "$MSG" "second prose line with several more words here"
+assert_contains "multiline: inline code span survives (H10 regression)" "$MSG" 'see `cfg/db_pool.toml` and rerun `make db-init` after'
+assert_contains "multiline: trailing prose survives"                    "$MSG" "trailing prose after code block here"
+CODE_ACTUAL=$(printf '%s\n' "$MSG" | awk '/^[ \t]*```/{print; f=!f; next} f{print}')
+assert_eq "multiline: code block byte-identical (C1 regression)" "$CODE_ACTUAL" $'```bash\ncode line one\ncode line two\n```'
+
+run_hook "$TEST_DIR/fixtures/no-marker.jsonl"
+assert_eq "no-marker: exit 0" "$HOOK_RC" "0"
+assert_empty "no-marker: no output" "$HOOK_OUT"
+
+run_hook "$TEST_DIR/fixtures/mid-marker.jsonl"
+assert_eq "mid-marker: exit 0" "$HOOK_RC" "0"
+assert_empty "mid-marker: quoting the marker mid-text does not trigger expansion (M3 regression)" "$HOOK_OUT"
+
+run_hook "$TMP/definitely-missing.jsonl"
+assert_eq "missing transcript: exit 0" "$HOOK_RC" "0"
+assert_empty "missing transcript: no output" "$HOOK_OUT"
+
+OUT=$(printf 'this is not json' | APFEL="$STUB" bash "$HOOK" 2>/dev/null); HOOK_RC=$?
+assert_eq "garbage stdin: exit 0" "$HOOK_RC" "0"
+assert_empty "garbage stdin: no output" "$OUT"
+
+if [ "$(id -u)" != "0" ]; then
+  cp "$TEST_DIR/fixtures/single-line.jsonl" "$TMP/unreadable.jsonl"
+  chmod 000 "$TMP/unreadable.jsonl"
+  run_hook "$TMP/unreadable.jsonl"
+  assert_eq "unreadable transcript: exit 0, never exit 2 (H9 regression)" "$HOOK_RC" "0"
+  assert_empty "unreadable transcript: no output" "$HOOK_OUT"
+  chmod 644 "$TMP/unreadable.jsonl"
+fi
+
+echo "=== wrapper: end to end (claude shimmed) ==="
+SHIM_ARGS="$TMP/claude-args"
+cat > "$TMP/claude" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$SHIM_ARGS"
+printf 'DX: wrapped q | shim answered | ok\nmore prose from the shim here\n\n\`\`\`py\nprint(1)\nprint(2)\n\`\`\`\n\n<!-- faa -->\n'
+EOF
+chmod +x "$TMP/claude"
+OUT=$(PATH="$TMP:$PATH" APFEL="$STUB" bash "$ROOT/scripts/faa-wrap.sh" "test question" 2>/dev/null); RC=$?
+assert_eq "wrapper: exit 0" "$RC" "0"
+ARGS=$(cat "$SHIM_ARGS" 2>/dev/null || true)
+assert_contains "wrapper: loads plugin via --plugin-dir" "$ARGS" "--plugin-dir"
+assert_contains "wrapper: invokes the skill explicitly (H2 regression)" "$ARGS" "/faa-speak test question"
+assert_contains "wrapper: prose expanded" "$OUT" "more prose from the shim here"
+CODE_ACTUAL=$(printf '%s\n' "$OUT" | awk '/^[ \t]*```/{print; f=!f; next} f{print}')
+assert_eq "wrapper: code block byte-identical (H3 regression)" "$CODE_ACTUAL" $'```py\nprint(1)\nprint(2)\n```'
+
+echo "=== manifest ==="
+if jq -e '.author | type == "object"' "$ROOT/.claude-plugin/plugin.json" >/dev/null 2>&1; then
+  ok "plugin.json author is an object (C0 regression)"
+else
+  fail "plugin.json author is an object (C0 regression)"
+fi
+if jq -e '.name and .version and .license' "$ROOT/.claude-plugin/plugin.json" >/dev/null 2>&1; then
+  ok "plugin.json has name/version/license"
+else
+  fail "plugin.json has name/version/license"
+fi
+
+echo "=== dictionary drift (lib is canonical; SKILL.md/README tables must match) ==="
+# shellcheck disable=SC2086  # word-splitting FAA_DICT into entries is the point
+dict_sorted() { printf '%s\n' $FAA_DICT | sort; }
+table_entries() { # file
+  awk -F'|' '/^\| [a-z]/ {
+    gsub(/ /, "", $2); gsub(/^ +| +$/, "", $3)
+    gsub(/ /, "", $5); gsub(/^ +| +$/, "", $6)
+    if ($2 != "") print $2 "=" $3
+    if ($5 != "") print $5 "=" $6
+  }' "$1" | sort
+}
+if [ "$(table_entries "$ROOT/skills/faa-speak/SKILL.md")" = "$(dict_sorted)" ]; then
+  ok "SKILL.md table matches lib dictionary"
+else
+  fail "SKILL.md table drifted from lib dictionary (M1 regression)"
+  diff <(table_entries "$ROOT/skills/faa-speak/SKILL.md") <(dict_sorted) | head -8
+fi
+if [ "$(table_entries "$ROOT/README.md")" = "$(dict_sorted)" ]; then
+  ok "README.md table matches lib dictionary"
+else
+  fail "README.md table drifted from lib dictionary (M1 regression)"
+  diff <(table_entries "$ROOT/README.md") <(dict_sorted) | head -8
+fi
+if grep -c 'cmp=component' "$ROOT/lib/expansion.sh" | grep -qx '1'; then
+  ok "no duplicate dictionary entries in lib"
+else
+  fail "duplicate cmp=component in lib"
+fi
+
+echo
+printf '%d passed, %d failed\n' "$PASS" "$FAIL"
+[ "$FAIL" -eq 0 ]
