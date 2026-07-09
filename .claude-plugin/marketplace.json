@@ -1,0 +1,14 @@
+{
+  "name": "faa-speak",
+  "description": "FAA-inspired compressed Claude output with free on-device expansion via apfel",
+  "owner": {
+    "name": "vliggio"
+  },
+  "plugins": [
+    {
+      "name": "faa-speak",
+      "source": "./",
+      "description": "FAA-inspired compressed output with on-device expansion via apfel"
+    }
+  ]
+}
