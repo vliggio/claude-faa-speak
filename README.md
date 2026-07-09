@@ -19,7 +19,7 @@ You (normal English)
 2. **Claude responds compressed** using 40 standard abbreviations, structural prefixes (`DX:` for diagnosis, `EX:` for explanation, `ARCH:` for architecture), and telegraphic style.
 3. **The Stop hook fires**, extracts the compressed text, expands the prose through apfel, and shows the readable English below the response as a system message. Code blocks, fences, and their contents are never sent through the expander.
 
-Token savings are **not yet measured** — run `scripts/bench.sh` (requires a logged-in `claude` CLI) to measure on your own prompts before trusting any number.
+Measured savings: **~52% of output tokens** on the three bundled benchmark prompts (range 39–59%; single `scripts/bench.sh` run, 2026-07-09). Run `scripts/bench.sh` with your own prompts before relying on the number for your workload.
 
 > **Scope notes:** expansion runs for the main conversation only (subagent output is not expanded), and the on-device expansion is best-effort — if apfel fails or is missing, you simply see the compressed text.
 
