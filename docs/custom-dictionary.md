@@ -48,8 +48,17 @@ tokenizes worse than `event`). The earning rule:
 
 > tokens(full form) − tokens(abbreviation) ≥ 1, measured in context
 
-Measure with the `count_tokens` API. Constant message overhead cancels when
-you subtract, and putting the word in a sentence keeps tokenization realistic:
+The easy path — no API key needed, just a logged-in `claude` CLI:
+
+```bash
+scripts/verify-deltas.sh          # measures every current entry + a built-in
+                                  # devops candidate set; prints KEEP/CUT/ADD/SKIP
+scripts/verify-deltas.sh my.txt   # your own candidates (lines: abbrev|full form)
+```
+
+Or measure by hand with the `count_tokens` API. Constant message overhead
+cancels when you subtract, and putting the word in a sentence keeps
+tokenization realistic:
 
 ```bash
 count() {
