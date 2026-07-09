@@ -19,7 +19,7 @@ You (normal English)
 2. **Claude responds compressed** using 40 standard abbreviations, structural prefixes (`DX:` for diagnosis, `EX:` for explanation, `ARCH:` for architecture), and telegraphic style.
 3. **The Stop hook fires**, extracts the compressed text, expands the prose through apfel, and shows the readable English below the response as a system message. Code blocks, fences, and their contents are never sent through the expander.
 
-Token savings are **not yet measured** — run `scripts/bench.sh` (requires a logged-in `claude` CLI) to measure on your own prompts before trusting any number.
+Measured savings: **~53% of output tokens** (10-prompt `scripts/bench.sh --ab` run, 2026-07-09: plain=15851 → faa=7413). The A/B's no-dictionary arm saved 45%, so telegraphic style does most of the work and the abbreviation table adds ~8 points on top (9 of 10 prompts favored it). Run the bench with your own prompts before relying on these numbers for your workload.
 
 > **Scope notes:** expansion runs for the main conversation only (subagent output is not expanded), and the on-device expansion is best-effort — if apfel fails or is missing, you simply see the compressed text.
 
@@ -103,7 +103,7 @@ ARCH: db conn pooling | more mem vs reduced latency | rec for high-load srv, ski
 
 ## Abbreviation Reference
 
-The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`.
+The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`. To extend it with entries measured against your own usage (transcript mining → token-delta verification → A/B), see [docs/custom-dictionary.md](docs/custom-dictionary.md).
 
 | Abbr | Meaning | | Abbr | Meaning |
 |------|---------|---|------|---------|

@@ -174,6 +174,31 @@ else
   fail "duplicate cmp=component in lib"
 fi
 
+echo "=== bench: no-dictionary A/B variant (issue #10) ==="
+NODICT="$ROOT/bench/nodict-plugin"
+if jq -e '(.author | type) == "object" and .name == "faa-speak-nodict"' "$NODICT/.claude-plugin/plugin.json" >/dev/null 2>&1; then
+  ok "nodict variant manifest structurally valid"
+else
+  fail "nodict variant manifest structurally valid"
+fi
+NODSKILL="$NODICT/skills/faa-speak-nodict/SKILL.md"
+if [ -f "$NODSKILL" ]; then ok "nodict variant skill exists"; else fail "nodict variant skill exists"; fi
+rows=$(grep -cE '^\| [a-z]+ +\| [a-z]' "$NODSKILL" 2>/dev/null || true)
+assert_eq "nodict variant carries no abbreviation table (the A/B's whole point)" "${rows:-0}" "0"
+if grep -q 'write every word in full' "$NODSKILL"; then
+  ok "nodict variant forbids spontaneous abbreviation"
+else
+  fail "nodict variant forbids spontaneous abbreviation"
+fi
+if grep -qF '<!-- faa -->' "$NODSKILL"; then ok "nodict variant keeps the marker contract"; else fail "nodict variant keeps the marker contract"; fi
+if bash -n "$ROOT/scripts/bench.sh" 2>/dev/null; then ok "bench.sh parses"; else fail "bench.sh parses"; fi
+if bash -n "$ROOT/scripts/mine-dict.sh" 2>/dev/null; then ok "mine-dict.sh parses"; else fail "mine-dict.sh parses"; fi
+printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"the kubernetes deployment rollout needs a readiness probe and the connection pool exhausts quickly\n```bash\nignore_this_code_token\n```\n"}]}}' > "$TMP/mine-fixture.jsonl"
+MINED=$(TOP=5 MINCOUNT=1 MINLEN=5 bash "$ROOT/scripts/mine-dict.sh" "$TMP" 2>/dev/null)
+assert_contains "mine-dict finds unigram candidates" "$MINED" "kubernetes"
+assert_contains "mine-dict finds bigram phrases" "$MINED" "connection pool"
+case "$MINED" in *ignore_this_code_token*) fail "mine-dict strips code blocks" ;; *) ok "mine-dict strips code blocks" ;; esac
+
 echo
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

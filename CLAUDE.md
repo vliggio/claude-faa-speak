@@ -32,7 +32,7 @@ SKILL.md controls Claude's output format
 - **Code blocks are never expanded.** The splitter passes fenced blocks (including indented fences) through byte-identical — `test/run.sh` asserts this.
 - **`systemMessage` is capped at 10k chars** — the hook truncates beyond ~9.5k (the full expansion always streamed to stderr).
 - **Auto-clarity exceptions**: SKILL.md drops compression for security warnings, irreversible operations, ambiguous multi-step sequences, and user confusion.
-- **The dictionary lives in exactly one place:** `lib/expansion.sh` (`FAA_DICT`). The tables in `SKILL.md` and `README.md` are human-facing copies; `test/run.sh` fails if either drifts. To add an abbreviation: edit `FAA_DICT`, then both tables.
+- **The dictionary lives in exactly one place:** `lib/expansion.sh` (`FAA_DICT`). The tables in `SKILL.md` and `README.md` are human-facing copies; `test/run.sh` fails if either drifts. To add an abbreviation: edit `FAA_DICT`, then both tables. New entries must be measured first — the process (mine → token-delta → A/B) is in `docs/custom-dictionary.md`.
 
 ## Testing
 
@@ -46,8 +46,9 @@ claude --print --plugin-dir . "/faa-speak explain database connection pooling"
 # Live end-to-end (requires apfel built):
 ./scripts/faa-wrap.sh "explain database connection pooling"
 
-# Token-savings measurement (unverified claim until run):
+# Token-savings measurement (README carries the latest measured number):
 ./scripts/bench.sh
+./scripts/bench.sh --ab   # + no-dictionary arm (bench/nodict-plugin) — issue #10 dictionary A/B
 ```
 
 ## Prerequisites

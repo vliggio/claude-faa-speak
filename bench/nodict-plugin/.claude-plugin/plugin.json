@@ -1,0 +1,9 @@
+{
+  "name": "faa-speak-nodict",
+  "version": "0.2.0",
+  "description": "Benchmark-only faa-speak variant without the abbreviation dictionary — used by scripts/bench.sh --ab",
+  "author": {
+    "name": "vliggio"
+  },
+  "license": "MIT"
+}
