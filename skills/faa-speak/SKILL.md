@@ -1,11 +1,11 @@
 ---
 name: faa-speak
 description: >
-  FAA-inspired compressed output mode. Cuts token usage ~75% using structured
+  FAA-inspired compressed output mode. Reduces output tokens using structured
   abbreviations, positional patterns, and telegraphic style while keeping full
-  technical accuracy. Like METAR for code talk. Use when user says "faa mode",
-  "faa-speak", "tower mode", "compressed mode", invokes /faa-speak, or
-  requests token-efficient output.
+  technical accuracy (measure your savings with scripts/bench.sh). Like METAR
+  for code talk. Use when user says "faa mode", "faa-speak", "tower mode",
+  "compressed mode", invokes /faa-speak, or requests token-efficient output.
 ---
 
 Respond compressed like FAA weather report. All technical substance stay. Structure stay. Only fluff die.

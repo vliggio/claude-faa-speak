@@ -1,43 +1,53 @@
 # faa-speak
 
-Claude Code plugin that makes Claude respond in FAA-inspired compressed format to reduce output tokens, then transparently expands the compressed text back to readable English using Apple's on-device LLM ([apfel](https://github.com/vliggio/apfel)) at zero additional API cost.
+Claude Code plugin that makes Claude respond in FAA-inspired compressed format to reduce output tokens, then expands the compressed text back to readable English using Apple's on-device foundation model (via [apfel](https://github.com/vliggio/apfel)) at zero additional API cost.
 
 ## How It Works
 
 ```
 You (normal English)
-    → Claude API → Compressed response (fewer tokens, cheaper)
+    → Claude API → Compressed response (fewer output tokens)
                         ↓
-              Stop hook detects <!-- faa --> marker
+              Stop hook detects the <!-- faa --> marker at the end
                         ↓
-              apfel expands locally (free on-device inference)
+              apfel expands prose locally (code blocks pass through untouched)
                         ↓
-              Expanded English printed below
+              Expanded English appears in the UI as a system message
 ```
 
 1. **You write normally.** No changes to your input.
-2. **Claude responds compressed** using ~40 standard abbreviations, structural prefixes (`DX:` for diagnosis, `EX:` for explanation, `ARCH:` for architecture), and telegraphic style. Output tokens reduced ~70-80%.
-3. **The Stop hook fires**, extracts the compressed text, pipes it through apfel (Apple's on-device LLM), and prints the expanded English to stderr.
+2. **Claude responds compressed** using 40 standard abbreviations, structural prefixes (`DX:` for diagnosis, `EX:` for explanation, `ARCH:` for architecture), and telegraphic style.
+3. **The Stop hook fires**, extracts the compressed text, expands the prose through apfel, and shows the readable English below the response as a system message. Code blocks, fences, and their contents are never sent through the expander.
+
+Token savings are **not yet measured** — run `scripts/bench.sh` (requires a logged-in `claude` CLI) to measure on your own prompts before trusting any number.
+
+> **Scope notes:** expansion runs for the main conversation only (subagent output is not expanded), and the on-device expansion is best-effort — if apfel fails or is missing, you simply see the compressed text.
 
 ## Prerequisites
 
 - **macOS 26+** with Apple Intelligence enabled
+- **Xcode / Swift toolchain** (to build apfel)
 - **apfel** built and available:
   ```bash
+  git clone https://github.com/vliggio/apfel ~/git/apfel
   cd ~/git/apfel && swift build -c release
-  # Either add to PATH or the hook will find it at ~/git/apfel/.build/release/apfel
+  # Either add the binary to PATH, set APFEL=/path/to/apfel, or leave it at
+  # ~/git/apfel/.build/release/apfel (the default search location)
   ```
 - **jq** installed (`brew install jq`)
 
 ## Installation
 
 ```bash
-# From the plugin directory
-claude plugin install /path/to/claude-faa-speak
-
-# Or use --plugin-dir for testing
+# Try it for one session (no install)
 claude --plugin-dir /path/to/claude-faa-speak
+
+# Install permanently via the bundled marketplace
+claude plugin marketplace add vliggio/claude-faa-speak
+claude plugin install faa-speak@faa-speak
 ```
+
+Verify the plugin loads: `claude plugin validate /path/to/claude-faa-speak`.
 
 ## Usage
 
@@ -53,20 +63,33 @@ Deactivate with:
 - "stop faa"
 - "normal mode"
 
-### Non-interactive (claude --print)
+Compression persists only as long as the model keeps honoring the skill — if a response arrives without the trailing `<!-- faa -->` marker, that response is simply not expanded.
 
-Use the wrapper script:
+### Non-interactive (claude --print)
 
 ```bash
 ./scripts/faa-wrap.sh "explain database connection pooling"
 ```
 
+The wrapper loads the plugin with `--plugin-dir` and invokes `/faa-speak` explicitly (skills do not auto-trigger in `--print` mode), then expands the reply and prints readable English to stdout.
+
+### Environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `APFEL=/path/to/apfel` | Override apfel discovery (also how the test suite stubs it) |
+| `FAA_DEBUG=1` | Hook logs the reason for any no-op to stderr (visible with `claude --debug`) |
+| `FAA_SHOW_COMPRESSED=1` | Wrapper prints the raw compressed reply before the expansion |
+
 ## Compression Examples
 
-**Error diagnosis:**
+**Error diagnosis (compressed):**
 ```
 DX: auth mw reject valid tokens | expiry chk uses < not <= | fix: change to <= in token_validator.rs:47
 ```
+
+**What the expansion shows you:**
+> Diagnosis: the authentication middleware rejects valid tokens. The expiry check uses a strict less-than comparison instead of less-than-or-equal. Fix: change it to `<=` in `token_validator.rs:47`.
 
 **Code explanation:**
 ```
@@ -80,26 +103,30 @@ ARCH: db conn pooling | more mem vs reduced latency | rec for high-load srv, ski
 
 ## Abbreviation Reference
 
+The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`.
+
 | Abbr | Meaning | | Abbr | Meaning |
 |------|---------|---|------|---------|
 | fn | function | | env | environment |
 | ret | return | | srv | server |
 | impl | implementation | | param | parameter |
-| cfg | configuration | | val | value |
-| db | database | | var | variable |
-| auth | authentication | | obj | object |
-| req | request | | arr | array |
-| res | response | | str | string |
-| err | error | | mw | middleware |
-| dep | dependency | | endpt | endpoint |
-| pkg | package | | hdr | header |
-| idx | index | | cmp | component |
-| init | initialize | | rdr | render |
-| del | delete | | cb | callback |
-| upd | update | | evnt | event |
-| chk | check | | sig | signal |
-| vld | validate | | async | asynchronous |
-| msg | message | | bool | boolean |
+| cfg | configuration | | arg | argument |
+| db | database | | val | value |
+| auth | authentication | | var | variable |
+| req | request | | obj | object |
+| res | response | | arr | array |
+| err | error | | str | string |
+| dep | dependency | | int | integer |
+| pkg | package | | bool | boolean |
+| idx | index | | iter | iteration |
+| init | initialize | | tpl | template |
+| del | delete | | cmp | component |
+| upd | update | | rdr | render |
+| chk | check | | cb | callback |
+| vld | validate | | evnt | event |
+| msg | message | | sig | signal |
+| hdr | header | | async | asynchronous |
+| endpt | endpoint | | mw | middleware |
 
 ## Safety
 
@@ -107,9 +134,19 @@ Compression automatically disengages for:
 - Security warnings
 - Irreversible operation confirmations
 - Multi-step sequences where abbreviation could cause misreading
+- Any sign the user is confused
 
-Code blocks, file paths, error messages, and commands are never abbreviated.
+Fenced code blocks are never expanded (enforced structurally by the splitter). File paths, error messages, and inline code are additionally protected by the expansion prompt, but the on-device model is small — treat expanded prose as a convenience view and the compressed original as authoritative.
+
+## Testing
+
+```bash
+bash test/run.sh          # full suite: splitter, pipeline, hook, wrapper, manifest, dictionary drift
+claude plugin validate .  # manifest check
+```
+
+The suite stubs apfel via `APFEL` and shims `claude`, so it runs without a model or login.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
