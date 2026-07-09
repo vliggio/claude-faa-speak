@@ -138,6 +138,18 @@ Compression automatically disengages for:
 
 Fenced code blocks are never expanded (enforced structurally by the splitter). File paths, error messages, and inline code are additionally protected by the expansion prompt, but the on-device model is small — treat expanded prose as a convenience view and the compressed original as authoritative.
 
+## Repository Layout
+
+| Path | Role |
+|------|------|
+| `skills/faa-speak/` | The compression skill — system prompt and trigger surface |
+| `hooks/` | Stop-hook wiring + `expand-output.sh` (transcript → apfel → systemMessage) |
+| `lib/expansion.sh` | Single source of truth: dictionary, expansion prompt, code/prose splitter |
+| `scripts/` | `faa-wrap.sh` (non-interactive), `bench.sh` (token benchmark), `mine-dict.sh` (dictionary candidate miner) |
+| `bench/nodict-plugin/` | Benchmark-only variant without the dictionary — the `--ab` comparison arm |
+| `test/` | Fixture-based suite; apfel stubbed via `APFEL`, `claude` shimmed — no login needed |
+| `docs/` | [Custom-dictionary guide](docs/custom-dictionary.md), audit history |
+
 ## Testing
 
 ```bash
@@ -146,6 +158,33 @@ claude plugin validate .  # manifest check
 ```
 
 The suite stubs apfel via `APFEL` and shims `claude`, so it runs without a model or login.
+
+## Benchmarking & Dictionary Tuning
+
+Measure the savings on your own workload (requires a logged-in `claude` CLI; spends real tokens):
+
+```bash
+scripts/bench.sh                      # plain vs /faa-speak, 3 bundled prompts
+scripts/bench.sh "my prompt" "..."    # your own prompts
+scripts/bench.sh --ab                 # + no-dictionary arm over 10 prompts —
+                                      #   isolates the abbreviation table's contribution
+```
+
+The `--ab` arm is swappable, so a candidate dictionary variant is one command to test:
+
+```bash
+VARIANT_ROOT="$PWD/bench/extdict-plugin" VARIANT_SKILL=faa-speak-extdict \
+  scripts/bench.sh --ab
+```
+
+To find candidates worth testing, mine your own local transcripts — assistant text only, with code, URLs, stopwords, and already-covered terms stripped; output is vocabulary and counts, never conversation content:
+
+```bash
+scripts/mine-dict.sh ~/.claude/projects/<project-dir>   # scope to real work
+TOP=60 MINCOUNT=10 scripts/mine-dict.sh                  # tuning knobs
+```
+
+The full measurement-gated process — corpus hygiene, `count_tokens` delta verification, abbreviation-selection rules, and the A/B decision gate — is documented in [docs/custom-dictionary.md](docs/custom-dictionary.md).
 
 ## License
 
