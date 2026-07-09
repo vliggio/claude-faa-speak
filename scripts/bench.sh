@@ -6,15 +6,20 @@
 #
 # Usage:
 #   scripts/bench.sh [prompts...]        plain vs /faa-speak
-#   scripts/bench.sh --ab [prompts...]   adds a no-dictionary arm (issue #10):
-#                                        same telegraphic style with the
-#                                        abbreviation table removed, to
+#   scripts/bench.sh --ab [prompts...]   adds a variant arm; by default the
+#                                        no-dictionary variant (issue #10) to
 #                                        isolate the dictionary's contribution
+#
+# The --ab arm is overridable — to A/B a candidate dictionary extension
+# (see docs/custom-dictionary.md):
+#   VARIANT_ROOT="$PWD/bench/extdict-plugin" VARIANT_SKILL=faa-speak-extdict \
+#     scripts/bench.sh --ab
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PLUGIN_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-NODICT_ROOT="$PLUGIN_ROOT/bench/nodict-plugin"
+VARIANT_ROOT="${VARIANT_ROOT:-$PLUGIN_ROOT/bench/nodict-plugin}"
+VARIANT_SKILL="${VARIANT_SKILL:-faa-speak-nodict}"
 
 command -v claude >/dev/null 2>&1 || { echo "Error: claude CLI not found" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "Error: jq not found" >&2; exit 1; }
@@ -64,10 +69,10 @@ pct_saved() { # new base -> integer percent saved vs base
 
 total_plain=0
 total_faa=0
-total_nodict=0
+total_variant=0
 
 if [ "$AB" = 1 ]; then
-  printf '%-52s %8s %8s %8s %7s %7s\n' "prompt" "plain" "faa" "nodict" "faa%" "nodict%"
+  printf '%-52s %8s %8s %8s %7s %7s\n' "prompt" "plain" "faa" "variant" "faa%" "var%"
 else
   printf '%-52s %10s %8s %8s\n' "prompt" "plain" "faa" "delta"
 fi
@@ -78,10 +83,10 @@ for p in "${PROMPTS[@]}"; do
   total_plain=$((total_plain + plain))
   total_faa=$((total_faa + faa))
   if [ "$AB" = 1 ]; then
-    nodict=$(tokens --plugin-dir "$NODICT_ROOT" "/faa-speak-nodict $p")
-    total_nodict=$((total_nodict + nodict))
-    printf '%-52.52s %8s %8s %8s %6s%% %6s%%\n' "$p" "$plain" "$faa" "$nodict" \
-      "$(pct_saved "$faa" "$plain")" "$(pct_saved "$nodict" "$plain")"
+    variant=$(tokens --plugin-dir "$VARIANT_ROOT" "/$VARIANT_SKILL $p")
+    total_variant=$((total_variant + variant))
+    printf '%-52.52s %8s %8s %8s %6s%% %6s%%\n' "$p" "$plain" "$faa" "$variant" \
+      "$(pct_saved "$faa" "$plain")" "$(pct_saved "$variant" "$plain")"
   else
     printf '%-52.52s %10s %8s %7s%%\n' "$p" "$plain" "$faa" "$(pct_saved "$faa" "$plain")"
   fi
@@ -89,14 +94,20 @@ done
 
 echo
 if [ "$AB" = 1 ]; then
-  printf 'TOTAL: plain=%d faa=%d (%d%%) nodict=%d (%d%%)\n' \
+  printf 'TOTAL: plain=%d faa=%d (%d%%) %s=%d (%d%%)\n' \
     "$total_plain" "$total_faa" "$(pct_saved "$total_faa" "$total_plain")" \
-    "$total_nodict" "$(pct_saved "$total_nodict" "$total_plain")"
-  dict_extra=$((total_nodict - total_faa))
-  printf 'dictionary contribution: %d tokens (%d%% of plain) beyond telegraphic style alone\n' \
-    "$dict_extra" "$(pct_saved "$total_faa" "$total_nodict")"
-  echo "If that contribution is within run-to-run noise (rerun a few times), the"
-  echo "abbreviation table and its sync machinery are not earning their keep (#10)."
+    "$VARIANT_SKILL" "$total_variant" "$(pct_saved "$total_variant" "$total_plain")"
+  delta=$((total_variant - total_faa))
+  if [ "$VARIANT_SKILL" = "faa-speak-nodict" ]; then
+    printf 'dictionary contribution: %d tokens (%d%% of plain) beyond telegraphic style alone\n' \
+      "$delta" "$(pct_saved "$total_faa" "$total_variant")"
+    echo "If that contribution is within run-to-run noise (rerun a few times), the"
+    echo "abbreviation table and its sync machinery are not earning their keep (#10)."
+  else
+    printf 'faa minus %s: %d tokens (positive = current dictionary wins, negative = variant wins)\n' \
+      "$VARIANT_SKILL" "$delta"
+    echo "Repeat the run a few times — ship the variant only if it wins beyond noise."
+  fi
 else
   printf 'TOTAL: plain=%d faa=%d savings=%d%%\n' "$total_plain" "$total_faa" \
     "$(pct_saved "$total_faa" "$total_plain")"

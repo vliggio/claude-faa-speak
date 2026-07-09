@@ -103,7 +103,7 @@ ARCH: db conn pooling | more mem vs reduced latency | rec for high-load srv, ski
 
 ## Abbreviation Reference
 
-The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`.
+The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`. To extend it with entries measured against your own usage (transcript mining → token-delta verification → A/B), see [docs/custom-dictionary.md](docs/custom-dictionary.md).
 
 | Abbr | Meaning | | Abbr | Meaning |
 |------|---------|---|------|---------|
