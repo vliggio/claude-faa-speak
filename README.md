@@ -103,7 +103,7 @@ ARCH: db conn pooling | more mem vs reduced latency | rec for high-load srv, ski
 
 ## Abbreviation Reference
 
-The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`. To extend it with entries measured against your own usage (transcript mining → token-delta verification → A/B), see [docs/custom-dictionary.md](docs/custom-dictionary.md).
+The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`. The stock entries are generic — the next section shows how to build a set measured against your own usage.
 
 | Abbr | Meaning | | Abbr | Meaning |
 |------|---------|---|------|---------|
@@ -127,6 +127,36 @@ The canonical dictionary lives in `lib/expansion.sh`; this table and the one in 
 | msg | message | | sig | signal |
 | hdr | header | | async | asynchronous |
 | endpt | endpoint | | mw | middleware |
+
+## Building a Custom Dictionary
+
+The stock table is generic; your workload's vocabulary is not. The measured A/B showed the dictionary is worth ~8 points of savings on top of telegraphic style — and every entry also carries a cost (it grows apfel's expansion prompt and adds an ambiguity the small on-device expander can get wrong). So entries are added by measurement, not intuition:
+
+**1. Mine candidates from your own transcripts.** Assistant text only; code, URLs, stopwords, and already-covered terms are stripped — the output is vocabulary and counts, never conversation content:
+
+```bash
+scripts/mine-dict.sh ~/.claude/projects/<project-dir>   # scope to real work
+TOP=60 MINCOUNT=10 scripts/mine-dict.sh                  # tuning knobs
+```
+
+Scope matters: agent-heavy sessions flood the ranking with their own vocabulary, and rows with suspiciously identical counts are one repeated artifact, not usage. Prefer the bigram/trigram phrase candidates (`environment variable → env var`) — phrases save more tokens per substitution than single words.
+
+**2. Verify each candidate's token delta.** Most short common words are already a single token, so abbreviating them saves nothing — and some abbreviations cost *more* (`evnt` tokenizes worse than `event`). A candidate earns a slot only if `tokens(full) − tokens(abbrev) ≥ 1`, measured with the `count_tokens` API; expected value ≈ corpus frequency × token delta.
+
+**3. Pick safe abbreviations.** Unambiguous, exactly one expansion each, no collisions with existing entries or with strings that appear as real identifiers in code (`ctx`, `txn`) — those are expansion-fidelity hazards.
+
+**4. A/B before shipping.** Copy `bench/nodict-plugin` to `bench/extdict-plugin`, add your rows to its skill table, and compare plain / current / candidate in one command:
+
+```bash
+VARIANT_ROOT="$PWD/bench/extdict-plugin" VARIANT_SKILL=faa-speak-extdict \
+  scripts/bench.sh --ab
+```
+
+Repeat a few times — ship only if the variant wins beyond run-to-run noise.
+
+**5. Ship.** Add the entries to `FAA_DICT` in `lib/expansion.sh` plus the tables here and in `SKILL.md`; `test/run.sh`'s drift test fails until all three agree. Prune measured-neutral entries while you're at it — a leaner table is a better table.
+
+Full details — corpus-hygiene rules, a ready-made `count_tokens` helper, and the decision gates — are in [docs/custom-dictionary.md](docs/custom-dictionary.md).
 
 ## Safety
 
@@ -159,7 +189,7 @@ claude plugin validate .  # manifest check
 
 The suite stubs apfel via `APFEL` and shims `claude`, so it runs without a model or login.
 
-## Benchmarking & Dictionary Tuning
+## Benchmarking
 
 Measure the savings on your own workload (requires a logged-in `claude` CLI; spends real tokens):
 
@@ -170,21 +200,7 @@ scripts/bench.sh --ab                 # + no-dictionary arm over 10 prompts —
                                       #   isolates the abbreviation table's contribution
 ```
 
-The `--ab` arm is swappable, so a candidate dictionary variant is one command to test:
-
-```bash
-VARIANT_ROOT="$PWD/bench/extdict-plugin" VARIANT_SKILL=faa-speak-extdict \
-  scripts/bench.sh --ab
-```
-
-To find candidates worth testing, mine your own local transcripts — assistant text only, with code, URLs, stopwords, and already-covered terms stripped; output is vocabulary and counts, never conversation content:
-
-```bash
-scripts/mine-dict.sh ~/.claude/projects/<project-dir>   # scope to real work
-TOP=60 MINCOUNT=10 scripts/mine-dict.sh                  # tuning knobs
-```
-
-The full measurement-gated process — corpus hygiene, `count_tokens` delta verification, abbreviation-selection rules, and the A/B decision gate — is documented in [docs/custom-dictionary.md](docs/custom-dictionary.md).
+The `--ab` comparison arm is swappable (`VARIANT_ROOT`/`VARIANT_SKILL`) — that's how candidate dictionaries get tested; see [Building a Custom Dictionary](#building-a-custom-dictionary).
 
 ## License
 
