@@ -1,173 +1,98 @@
 #!/usr/bin/env bash
 # faa-speak Stop hook
-# Extracts compressed assistant output, expands via apfel, prints to stderr.
-# Non-blocking: always exits 0, never prevents the stop.
-
+# Extracts compressed assistant output, expands via apfel, and shows the
+# result to the user as a systemMessage (stdout JSON, exit 0). Each expanded
+# segment is also streamed to stderr so a timeout kill preserves partials.
+#
+# Contract: never blocks the stop. The EXIT trap forces exit 0 on every path
+# (a Stop hook exiting 2 would block Claude from stopping; other nonzero exits
+# surface stderr noise). All failures degrade to a silent no-op — set
+# FAA_DEBUG=1 to see the reason for any no-op on stderr.
 set -euo pipefail
+trap 'exit 0' EXIT
 
-# Read hook input from stdin
-HOOK_INPUT=$(cat)
+# GNU tools in the C locale can abort on UTF-8 bytes; pin a UTF-8 locale.
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 
-# --- Locate apfel binary ---
-APFEL="${APFEL:-}"
-if [[ -z "$APFEL" ]]; then
-  if command -v apfel &>/dev/null; then
-    APFEL="apfel"
-  elif [[ -x "$HOME/git/apfel/.build/release/apfel" ]]; then
-    APFEL="$HOME/git/apfel/.build/release/apfel"
-  else
-    # No apfel available — silently skip
-    exit 0
-  fi
-fi
-
-# --- Extract last assistant text from transcript ---
-TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | jq -r '.transcript_path // ""')
-
-if [[ -z "$TRANSCRIPT_PATH" ]] || [[ ! -f "$TRANSCRIPT_PATH" ]]; then
-  exit 0
-fi
-
-# Check for assistant messages
-if ! grep -q '"role":"assistant"' "$TRANSCRIPT_PATH"; then
-  exit 0
-fi
-
-# Extract the most recent assistant text block (same pattern as ralph-loop)
-LAST_LINES=$(grep '"role":"assistant"' "$TRANSCRIPT_PATH" | tail -n 100)
-if [[ -z "$LAST_LINES" ]]; then
-  exit 0
-fi
-
-set +e
-LAST_OUTPUT=$(echo "$LAST_LINES" | jq -rs '
-  map(.message.content[]? | select(.type == "text") | .text) | last // ""
-' 2>&1)
-JQ_EXIT=$?
-set -e
-
-if [[ $JQ_EXIT -ne 0 ]] || [[ -z "$LAST_OUTPUT" ]]; then
-  exit 0
-fi
-
-# --- Check for faa-speak marker ---
-if [[ "$LAST_OUTPUT" != *'<!-- faa -->'* ]]; then
-  exit 0
-fi
-
-# Strip the marker
-TEXT="${LAST_OUTPUT//<!-- faa -->/}"
-# Trim trailing whitespace
-TEXT=$(echo "$TEXT" | sed -e 's/[[:space:]]*$//')
-
-if [[ -z "$TEXT" ]]; then
-  exit 0
-fi
-
-# --- Expansion system prompt ---
-EXPANSION_PROMPT='Expand abbreviated technical text to clear English.
-Abbreviations: fn=function ret=return impl=implementation cfg=configuration db=database auth=authentication req=request res=response err=error dep=dependency pkg=package env=environment srv=server param=parameter val=value var=variable obj=object arr=array str=string mw=middleware endpt=endpoint hdr=header cmp=component rdr=render cb=callback init=initialize del=delete upd=update chk=check vld=validate idx=index iter=iteration tpl=template cmp=component evnt=event sig=signal bool=boolean int=integer async=asynchronous msg=message
-Arrows (→) mean "leads to" or "causes". DX: = diagnosis (symptom|cause|fix). EX: = explanation (what|why|how). ARCH: = architecture (pattern|tradeoff|recommendation).
-Preserve code blocks, file paths, and commands exactly as-is. Do not modify anything inside backticks or fenced code blocks.
-Add articles, conjunctions, and natural phrasing. Do not add opinions or extra information not present in the original.'
-
-# --- Separate code blocks from prose ---
-# We pass code blocks through unchanged and only expand prose sections.
-# Strategy: split into segments, tag each as "code" or "prose", expand prose only.
-
-expand_prose() {
-  local chunk="$1"
-  if [[ -z "$chunk" ]]; then
-    return
-  fi
-  # Approximate word count
-  local wc
-  wc=$(echo "$chunk" | wc -w | tr -d ' ')
-  if [[ "$wc" -le 3 ]]; then
-    # Too short to bother expanding
-    echo "$chunk"
-    return
-  fi
-  # Pipe through apfel
-  local expanded
-  expanded=$(echo "$chunk" | "$APFEL" -s "$EXPANSION_PROMPT" 2>/dev/null) || true
-  if [[ -n "$expanded" ]]; then
-    echo "$expanded"
-  else
-    # Expansion failed — return original
-    echo "$chunk"
-  fi
+FAA_DEBUG="${FAA_DEBUG:-0}"
+dbg() {
+  if [ "$FAA_DEBUG" = "1" ]; then printf 'faa-speak: %s\n' "$*" >&2; fi
 }
 
-# Split text into code/prose segments and process
-# Uses awk to emit tagged segments: CODE:... or PROSE:...
-SEGMENTS=$(echo "$TEXT" | awk '
-  BEGIN { in_code=0; buf="" }
-  /^```/ {
-    if (!in_code) {
-      if (buf != "") { print "PROSE:" buf; buf="" }
-      in_code=1; buf=$0 "\n"
-    } else {
-      buf=buf $0 "\n"
-      print "CODE:" buf; buf=""
-      in_code=0
-    }
-    next
-  }
-  {
-    buf=buf $0 "\n"
-  }
-  END {
-    if (in_code) {
-      print "CODE:" buf
-    } else if (buf != "") {
-      print "PROSE:" buf
-    }
-  }
-')
-
-# Process segments and reassemble
-EXPANDED_OUTPUT=""
-while IFS= read -r segment; do
-  if [[ "$segment" == CODE:* ]]; then
-    # Code block — pass through unchanged
-    EXPANDED_OUTPUT+="${segment#CODE:}"
-  elif [[ "$segment" == PROSE:* ]]; then
-    # Prose — expand via apfel
-    prose_text="${segment#PROSE:}"
-    # Chunk large prose at double-newline boundaries (~500 words per chunk)
-    wc=$(echo "$prose_text" | wc -w | tr -d ' ')
-    if [[ "$wc" -gt 500 ]]; then
-      # Split on double newlines
-      chunk=""
-      chunk_wc=0
-      while IFS= read -r line; do
-        if [[ -z "$line" ]] && [[ "$chunk_wc" -gt 300 ]]; then
-          EXPANDED_OUTPUT+="$(expand_prose "$chunk")"
-          EXPANDED_OUTPUT+=$'\n\n'
-          chunk=""
-          chunk_wc=0
-        else
-          chunk+="$line"$'\n'
-          line_wc=$(echo "$line" | wc -w | tr -d ' ')
-          chunk_wc=$((chunk_wc + line_wc))
-        fi
-      done <<< "$prose_text"
-      if [[ -n "$chunk" ]]; then
-        EXPANDED_OUTPUT+="$(expand_prose "$chunk")"
-      fi
-    else
-      EXPANDED_OUTPUT+="$(expand_prose "$prose_text")"
-    fi
-  fi
-done <<< "$SEGMENTS"
-
-# --- Print expanded output to stderr ---
-if [[ -n "$EXPANDED_OUTPUT" ]]; then
-  echo "" >&2
-  echo "━━━ faa-speak expansion (via apfel) ━━━" >&2
-  echo "$EXPANDED_OUTPUT" >&2
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+# --- preflight ---
+if ! command -v jq >/dev/null 2>&1; then
+  dbg "jq not found — skipping"
+  exit 0
 fi
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../../lib/expansion.sh
+. "$SCRIPT_DIR/../../lib/expansion.sh"
+
+if ! faa_locate_apfel >/dev/null; then
+  dbg "apfel not found — skipping"
+  exit 0
+fi
+
+# --- read hook input, locate transcript ---
+HOOK_INPUT=$(cat)
+TRANSCRIPT_PATH=$(printf '%s' "$HOOK_INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
+if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
+  dbg "no transcript at '${TRANSCRIPT_PATH}'"
+  exit 0
+fi
+
+# Cheap no-op gate: if the marker isn't near the end of the transcript, skip
+# before any full-file parsing.
+if ! tail -c 65536 -- "$TRANSCRIPT_PATH" 2>/dev/null | grep -qF '<!-- faa -->'; then
+  dbg "no marker in transcript tail"
+  exit 0
+fi
+
+# --- extract the most recent assistant text ---
+set +e
+LAST_LINES=$(grep '"role":"assistant"' -- "$TRANSCRIPT_PATH" 2>/dev/null | tail -n 100)
+LAST_OUTPUT=$(printf '%s\n' "$LAST_LINES" | jq -rs '
+  map(.message.content[]? | select(.type == "text") | .text) | last // ""
+' 2>/dev/null)
+set -e
+
+if [ -z "$LAST_OUTPUT" ]; then
+  dbg "no assistant text found"
+  exit 0
+fi
+
+# --- marker gate: only expand when the marker terminates the response ---
+TEXT="$LAST_OUTPUT"
+while [ -n "$TEXT" ] && [[ "$TEXT" == *[$' \t\r\n'] ]]; do TEXT=${TEXT%?}; done
+if [[ "$TEXT" != *'<!-- faa -->' ]]; then
+  dbg "marker absent or not at end of response"
+  exit 0
+fi
+TEXT=${TEXT%'<!-- faa -->'}
+while [ -n "$TEXT" ] && [[ "$TEXT" == *[$' \t\r\n'] ]]; do TEXT=${TEXT%?}; done
+if [ -z "$TEXT" ]; then
+  dbg "nothing left after stripping marker"
+  exit 0
+fi
+
+# --- expand (streams segments to stderr; accumulates for systemMessage) ---
+printf '━━━ faa-speak expansion (via apfel) ━━━\n' >&2
+EXPANDED=$(FAA_STREAM=1 faa_expand_text "$TEXT") || EXPANDED=""
+printf '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' >&2
+
+if [ -z "$EXPANDED" ]; then
+  dbg "expansion produced no output"
+  exit 0
+fi
+
+# --- deliver visibly: systemMessage on stdout (exit 0) ---
+MSG="━━━ faa-speak expansion (via apfel) ━━━
+$EXPANDED"
+# systemMessage is capped at 10k chars; the full expansion always went to stderr
+if [ ${#MSG} -gt 9500 ]; then
+  MSG="${MSG:0:9500}
+… [truncated — full expansion in the debug log]"
+fi
+jq -n --arg msg "$MSG" '{systemMessage: $msg}'
 exit 0
