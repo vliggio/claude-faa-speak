@@ -21,6 +21,8 @@ You (normal English)
 
 Measured savings: **~53% of output tokens** (10-prompt `scripts/bench.sh --ab` run, 2026-07-09: plain=15851 → faa=7413). The A/B's no-dictionary arm saved 45%, so telegraphic style does most of the work and the abbreviation table adds ~8 points on top (9 of 10 prompts favored it). Run the bench with your own prompts before relying on these numbers for your workload.
 
+> **No Apple Silicon, or can't build apfel?** The compression half works on any platform — you get the full token savings either way; the hook just quietly skips the local re-expansion.
+>
 > **Scope notes:** expansion runs for the main conversation only (subagent output is not expanded), and the on-device expansion is best-effort — if apfel fails or is missing, you simply see the compressed text.
 
 ## Prerequisites
