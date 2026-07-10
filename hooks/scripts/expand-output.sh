@@ -12,9 +12,11 @@
 #
 # Contract: never blocks the stop. The EXIT trap forces exit 0 on every path
 # (a Stop hook exiting 2 would block Claude from stopping; other nonzero exits
-# surface stderr noise). All failures degrade to a silent no-op — set
-# FAA_DEBUG=1 to see the reason for any no-op on stderr. Set
-# FAA_SHOW_SAVINGS=1 to append a compression-savings line to the systemMessage.
+# surface stderr noise). Pipeline failures degrade to a silent no-op — set
+# FAA_DEBUG=1 to see the reason on stderr — EXCEPT total apfel failure, which
+# produces a visible warning with apfel's error instead of impersonating a
+# working expansion. Set FAA_SHOW_SAVINGS=1 to append a compression-savings
+# line to the systemMessage.
 set -euo pipefail
 trap 'exit 0' EXIT
 
@@ -111,8 +113,11 @@ else
 fi
 
 # --- expand (streams segments to stderr; accumulates for systemMessage) ---
+FALLBACK_FLAG="$STATE_DIR/faa-fellback-$$"
+APFEL_ERR="$STATE_DIR/faa-apfel-err-$$"
+rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR" 2>/dev/null || true
 printf '━━━ faa-speak expansion (via apfel) ━━━\n' >&2
-EXPANDED=$(FAA_STREAM=1 faa_expand_text "$TEXT") || EXPANDED=""
+EXPANDED=$(FAA_STREAM=1 FAA_FALLBACK_FLAG="$FALLBACK_FLAG" FAA_APFEL_ERR="$APFEL_ERR" faa_expand_text "$TEXT") || EXPANDED=""
 printf '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' >&2
 
 if [ -z "$EXPANDED" ]; then
@@ -122,8 +127,23 @@ fi
 sig_of "$TEXT" > "$STATE" 2>/dev/null || true
 
 # --- deliver visibly: systemMessage on stdout (exit 0) ---
+if [ -s "$FALLBACK_FLAG" ] && [ "$(sig_of "$EXPANDED")" = "$(sig_of "$TEXT")" ]; then
+  # Every chunk failed and the "expansion" is just the original text: say so
+  # instead of impersonating a working expansion with a 0% savings line.
+  APFEL_REASON=$(head -1 -- "$APFEL_ERR" 2>/dev/null || true)
+  rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR" 2>/dev/null || true
+  jq -n --arg msg "⚠ faa-speak: apfel could not expand this response${APFEL_REASON:+ — ${APFEL_REASON}}
+Compressed text shown as-is. Diagnose with: apfel --model-info" '{systemMessage: $msg}'
+  exit 0
+fi
 MSG="━━━ faa-speak expansion (via apfel) ━━━
 $EXPANDED"
+if [ -s "$FALLBACK_FLAG" ]; then
+  MSG="$MSG
+
+⚠ some segments could not be expanded (apfel error) — shown compressed"
+fi
+rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR" 2>/dev/null || true
 if [ "${FAA_SHOW_SAVINGS:-0}" = "1" ]; then
   MSG="$MSG
 

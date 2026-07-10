@@ -63,13 +63,19 @@ faa_split_segments() {
 }
 
 # Expand one chunk through apfel; falls back to the original text on any
-# failure so degradation is never silent data loss.
+# failure so degradation is never data loss. Failures are NOT silent to the
+# caller: when FAA_FALLBACK_FLAG names a file, each failed chunk appends to
+# it, and apfel's stderr is preserved in FAA_APFEL_ERR (if set) so the caller
+# can tell the user WHY (e.g. "Apple Intelligence not enabled").
 _faa_apfel_chunk() {
   local chunk="$1" out
-  out=$(printf '%s' "$chunk" | "$FAA_APFEL" -s "$EXPANSION_PROMPT" 2>/dev/null) || out=""
+  out=$(printf '%s' "$chunk" | "$FAA_APFEL" -s "$EXPANSION_PROMPT" 2>>"${FAA_APFEL_ERR:-/dev/null}") || out=""
   if [ -n "$out" ]; then
     printf '%s' "$out"
   else
+    if [ -n "${FAA_FALLBACK_FLAG:-}" ]; then
+      printf '1' >> "$FAA_FALLBACK_FLAG" 2>/dev/null || true
+    fi
     printf '%s' "$chunk"
   fi
 }

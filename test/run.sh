@@ -134,6 +134,19 @@ OUT2=$(printf '{"transcript_path":"%s","session_id":"dedupe-test"}' "$TEST_DIR/f
 case "$OUT1" in *systemMessage*) ok "fallback dedupe: first stop expands" ;; *) fail "fallback dedupe: first stop expands" ;; esac
 assert_empty "fallback dedupe: lagging transcript can never re-show the same text" "$OUT2"
 
+echo "=== hook: apfel failure is announced, not impersonated ==="
+HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" FAA_SHOW_SAVINGS=1 APFEL="$FAIL_STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "total apfel failure: warning delivered instead of fake expansion" "$MSG" "apfel could not expand"
+assert_contains "total apfel failure: diagnostic hint included" "$MSG" "apfel --model-info"
+case "$MSG" in *'faa-speak savings:'*) fail "total apfel failure: bogus 0% savings line suppressed" ;; *) ok "total apfel failure: bogus 0% savings line suppressed" ;; esac
+
+REASON_STUB="$TMP/apfel-reason"
+printf '#!/usr/bin/env bash\necho "error: Model unavailable (Apple Intelligence not enabled)" >&2\nexit 5\n' > "$REASON_STUB"; chmod +x "$REASON_STUB"
+HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" APFEL="$REASON_STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "total apfel failure: apfel's own error reason surfaced" "$MSG" "Apple Intelligence not enabled"
+
 run_hook "$TMP/definitely-missing.jsonl"
 assert_eq "missing transcript: exit 0" "$HOOK_RC" "0"
 assert_empty "missing transcript: no output" "$HOOK_OUT"
