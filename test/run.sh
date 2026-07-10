@@ -32,8 +32,9 @@ FAIL_STUB="$TMP/apfel-fail"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$FAIL_STUB"; chmod +x "$FAIL_STUB"
 
 run_hook() { # transcript-path [apfel] -> sets HOOK_OUT and HOOK_RC (no subshell at call site)
-  local apfel="${2:-$STUB}"
-  HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$1" | APFEL="$apfel" bash "$HOOK" 2>/dev/null)
+  local apfel="${2:-$STUB}" sdir
+  sdir=$(mktemp -d "$TMP/state.XXXXXX")   # fresh dedupe state per invocation
+  HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$1" | FAA_STATE_DIR="$sdir" APFEL="$apfel" bash "$HOOK" 2>/dev/null)
   HOOK_RC=$?
 }
 record_types() { # first char of each \036-separated record
@@ -105,12 +106,33 @@ run_hook "$TEST_DIR/fixtures/mid-marker.jsonl"
 assert_eq "mid-marker: exit 0" "$HOOK_RC" "0"
 assert_empty "mid-marker: quoting the marker mid-text does not trigger expansion (M3 regression)" "$HOOK_OUT"
 
-HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_SHOW_SAVINGS=1 APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" FAA_SHOW_SAVINGS=1 APFEL="$STUB" bash "$HOOK" 2>/dev/null)
 MSG=$(sysmsg "$HOOK_OUT")
 assert_contains "FAA_SHOW_SAVINGS=1: savings line appended to systemMessage" "$MSG" "faa-speak savings:"
-HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" APFEL="$STUB" bash "$HOOK" 2>/dev/null)
 MSG=$(sysmsg "$HOOK_OUT")
 case "$MSG" in *'faa-speak savings:'*) fail "savings line hidden by default" ;; *) ok "savings line hidden by default" ;; esac
+
+echo "=== hook: last_assistant_message (Stop/transcript race fix) ==="
+IMSG=$'DX: fresh from hook input | direct source | no file race\nsecond line survives here as well\n\n<!-- faa -->'
+HOOK_OUT=$(jq -n --arg m "$IMSG" '{last_assistant_message: $m}' | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "hook-input message: expansion delivered with no transcript at all" "$MSG" "fresh from hook input"
+assert_contains "hook-input message: multi-line text survives" "$MSG" "second line survives here as well"
+
+HOOK_OUT=$(jq -n --arg m "$IMSG" --arg t "$TEST_DIR/fixtures/single-line.jsonl" '{last_assistant_message: $m, transcript_path: $t}' | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "hook-input message takes precedence over the (laggy) transcript" "$MSG" "fresh from hook input"
+case "$MSG" in *"auth mw reject"*) fail "hook-input precedence: stale transcript text leaked" ;; *) ok "hook-input precedence: stale transcript text not consulted" ;; esac
+
+HOOK_OUT=$(jq -n '{last_assistant_message: "plain response with no marker"}' | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+assert_empty "hook-input message without end marker: silent no-op" "$HOOK_OUT"
+
+SDIR=$(mktemp -d "$TMP/state.XXXXXX")
+OUT1=$(printf '{"transcript_path":"%s","session_id":"dedupe-test"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$SDIR" APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+OUT2=$(printf '{"transcript_path":"%s","session_id":"dedupe-test"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$SDIR" APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+case "$OUT1" in *systemMessage*) ok "fallback dedupe: first stop expands" ;; *) fail "fallback dedupe: first stop expands" ;; esac
+assert_empty "fallback dedupe: lagging transcript can never re-show the same text" "$OUT2"
 
 run_hook "$TMP/definitely-missing.jsonl"
 assert_eq "missing transcript: exit 0" "$HOOK_RC" "0"
