@@ -124,8 +124,10 @@ ARCH: db conn pooling | more mem vs reduced latency | rec for high-load srv, ski
 
 The canonical dictionary lives in `lib/expansion.sh`; this table and the one in `skills/faa-speak/SKILL.md` are checked against it by `test/run.sh`. The stock entries are generic — the next section shows how to build a set measured against your own usage.
 
+<div align="center">
+
 | Abbr | Meaning | | Abbr | Meaning |
-|------|---------|---|------|---------|
+|:----:|---------|---|:----:|---------|
 | arg | argument | | init | initialize |
 | arr | array | | int | integer |
 | async | asynchronous | | iter | iteration |
@@ -146,6 +148,8 @@ The canonical dictionary lives in `lib/expansion.sh`; this table and the one in 
 | hdr | header | | val | value |
 | idx | index | | var | variable |
 | impl | implementation | | vld | validate |
+
+</div>
 
 ## Building a Custom Dictionary
 
