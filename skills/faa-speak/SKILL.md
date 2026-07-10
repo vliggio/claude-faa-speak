@@ -23,26 +23,26 @@ End every compressed response with `<!-- faa -->` on its own line.
 
 | Abbr | Meaning | | Abbr | Meaning |
 |------|---------|---|------|---------|
-| fn | function | | env | environment |
-| ret | return | | srv | server |
-| impl | implementation | | param | parameter |
-| cfg | configuration | | arg | argument |
-| db | database | | val | value |
-| auth | authentication | | var | variable |
-| req | request | | obj | object |
-| res | response | | arr | array |
+| arg | argument | | init | initialize |
+| arr | array | | int | integer |
+| async | asynchronous | | iter | iteration |
+| auth | authentication | | msg | message |
+| bool | boolean | | mw | middleware |
+| cb | callback | | obj | object |
+| cfg | configuration | | param | parameter |
+| chk | check | | pkg | package |
+| cmp | component | | rdr | render |
+| db | database | | req | request |
+| del | delete | | res | response |
+| dep | dependency | | ret | return |
+| endpt | endpoint | | sig | signal |
+| env | environment | | srv | server |
 | err | error | | str | string |
-| dep | dependency | | int | integer |
-| pkg | package | | bool | boolean |
-| idx | index | | iter | iteration |
-| init | initialize | | tpl | template |
-| del | delete | | cmp | component |
-| upd | update | | rdr | render |
-| chk | check | | cb | callback |
-| vld | validate | | evnt | event |
-| msg | message | | sig | signal |
-| hdr | header | | async | asynchronous |
-| endpt | endpoint | | mw | middleware |
+| evnt | event | | tpl | template |
+| fn | function | | upd | update |
+| hdr | header | | val | value |
+| idx | index | | var | variable |
+| impl | implementation | | vld | validate |
 
 ## Structural Prefixes
 
