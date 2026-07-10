@@ -99,17 +99,23 @@ DX: auth mw reject valid tokens | expiry chk uses < not <= | fix: change to <= i
 ```
 
 **What the expansion shows you:**
-> Diagnosis: the authentication middleware rejects valid tokens. The expiry check uses a strict less-than comparison instead of less-than-or-equal. Fix: change it to `<=` in `token_validator.rs:47`.
+> Diagnosis: the authentication middleware rejects valid tokens. The expiry check uses a strict less-than comparison instead of less-than-or-equal-to. Fix: change it to `<=` in `token_validator.rs:47`.
 
-**Code explanation:**
+**Code explanation (compressed):**
 ```
 EX: fn filter active users → extract emails | need clean mailing list from user db | filter where active=true, map to .email, ret str arr
 ```
 
-**Architecture advice:**
+**What the expansion shows you:**
+> What: a function that filters active users and extracts their emails. Why: to get a clean mailing list from the user database. How: filter where `active=true`, map to `.email`, and return an array of strings.
+
+**Architecture advice (compressed):**
 ```
 ARCH: db conn pooling | more mem vs reduced latency | rec for high-load srv, skip for low-traffic
 ```
+
+**What the expansion shows you:**
+> Pattern: database connection pooling. Tradeoff: uses more memory to maintain the pool, but significantly reduces latency under load. Recommendation: use it for high-load servers; skip it for low-traffic ones.
 
 ## Abbreviation Reference
 
