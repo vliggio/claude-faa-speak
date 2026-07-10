@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 160" role="img" aria-label="faa-speak logo">
+  <!-- faa-speak: control tower broadcasting a compressed transmission that
+       arrives as readable text. Dark-background variant of logo.svg. -->
+
+  <!-- beacon -->
+  <circle cx="80" cy="26" r="6" fill="#FFB627"/>
+  <!-- antenna -->
+  <line x1="80" y1="33" x2="80" y2="46" stroke="#A8C3E8" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- signal arcs -->
+  <path d="M 95.3 13.1 A 20 20 0 0 1 95.3 38.9" fill="none" stroke="#FFB627" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 104.5 5.4 A 32 32 0 0 1 104.5 46.6" fill="none" stroke="#FFB627" stroke-width="4" stroke-linecap="round" opacity="0.55"/>
+
+  <!-- tower cab -->
+  <path d="M 52 46 L 108 46 L 100 78 L 60 78 Z" fill="#A8C3E8"/>
+  <rect x="60" y="54" width="40" height="10" rx="3" fill="#22304A"/>
+  <!-- stem -->
+  <path d="M 71 78 L 89 78 L 93 126 L 67 126 Z" fill="#A8C3E8"/>
+  <!-- base -->
+  <rect x="56" y="126" width="48" height="10" rx="4" fill="#A8C3E8"/>
+
+  <!-- speech bubble (the transmission, received) -->
+  <path d="M 164 34 h 96 a 14 14 0 0 1 14 14 v 48 a 14 14 0 0 1 -14 14 h -96 a 14 14 0 0 1 -14 -14 v -10 l -22 -8 22 -8 v -22 a 14 14 0 0 1 14 -14 Z" fill="#A8C3E8"/>
+  <!-- telegraphic text bars -->
+  <rect x="168" y="50" width="50" height="8" rx="4" fill="#0D1117"/>
+  <rect x="224" y="50" width="20" height="8" rx="4" fill="#0D1117"/>
+  <rect x="168" y="66" width="26" height="8" rx="4" fill="#0D1117"/>
+  <rect x="200" y="66" width="44" height="8" rx="4" fill="#0D1117"/>
+  <rect x="168" y="82" width="34" height="8" rx="4" fill="#0D1117"/>
+  <!-- expansion arrow (apfel: compressed in, readable out) -->
+  <path d="M 212 86 h 28 m 0 0 l -7 -6 m 7 6 l -7 6" fill="none" stroke="#B4540A" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- wordmark -->
+  <text x="300" y="84" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace" font-size="44" font-weight="700" fill="#D6E2F5">faa-speak</text>
+  <text x="302" y="114" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace" font-size="13" fill="#8B9BB4">&lt;!-- compressed out · readable in --&gt;</text>
+</svg>
