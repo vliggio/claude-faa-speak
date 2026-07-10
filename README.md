@@ -92,6 +92,8 @@ The wrapper loads the plugin with `--plugin-dir` and invokes `/faa-speak` explic
 | `FAA_SHOW_COMPRESSED=1` | Wrapper prints the raw compressed reply before the expansion |
 | `FAA_SHOW_SAVINGS=1` | Reports compression savings (word/char counts) on expansion — appended to the hook's systemMessage, printed to stderr by the wrapper |
 
+**These are read by the hook process, not your session** — they must be in the environment that *launches* `claude` (see [How to Debug](#how-to-debug)). Setting them in another terminal, or after Claude Code is already running, does nothing.
+
 ## Compression Examples
 
 **Error diagnosis (compressed):**
@@ -196,6 +198,48 @@ Fenced code blocks are never expanded (enforced structurally by the splitter). F
 | `bench/nodict-plugin/` | Benchmark-only variant without the dictionary — the `--ab` comparison arm |
 | `test/` | Fixture-based suite; apfel stubbed via `APFEL`, `claude` shimmed — no login needed |
 | `docs/` | [Custom-dictionary guide](docs/custom-dictionary.md), audit history |
+
+## How to Debug
+
+The hook is designed to fail quiet rather than break your session, so when something's off, you have to *ask* it why. Debugging is a **CLI-only** workflow: the `FAA_*` variables and the `--debug` flag both require control over how `claude` is launched, which you don't have in the desktop app (it doesn't inherit your shell's exports). If you normally use the desktop app, debug from a terminal — the plugin behaves identically.
+
+**1. Launch with the variables on the command line** (this is the part that trips people up — the hook inherits the environment of the `claude` *process*, not whatever shell you happen to export things in later):
+
+```bash
+FAA_DEBUG=1 FAA_SHOW_SAVINGS=1 claude --debug
+```
+
+**2. Find the hook's log lines.** `--debug` prints a log path at session start (`~/.claude/debug/<session-id>.txt`). Everything the hook wants to tell you is in there:
+
+```bash
+grep 'faa-speak:' ~/.claude/debug/<session-id>.txt   # every no-op explains itself
+grep -A3 'Hook Stop' ~/.claude/debug/<session-id>.txt # what the hook actually emitted
+```
+
+The `faa-speak:` lines tell you which text source was used (`last_assistant_message` vs the transcript fallback), why a response was skipped (no marker, marker mid-text, already expanded, jq/apfel missing), and the hook-input keys if a Claude Code update ever changes the schema.
+
+**3. Check apfel independently.** If expansions come back identical to the compressed text, apfel is failing and falling back — the hook will say so in a `⚠` systemMessage with apfel's own error. Verify directly:
+
+```bash
+apfel --model-info                                    # is Apple Intelligence enabled + model downloaded?
+printf 'db conn pool chk' | apfel -s "expand abbreviations"
+```
+
+**4. Rule out the plugin itself** — both run without a model or login:
+
+```bash
+bash test/run.sh          # 69 checks; all green means the pipeline is healthy
+claude plugin validate .  # manifest loads
+```
+
+Quick symptom table:
+
+| Symptom | Likely cause | Where it tells you |
+|---|---|---|
+| No expansion at all | plugin not loaded, or response had no trailing marker | debug log: `Registered 0 hooks` / `faa-speak: marker absent` |
+| `⚠ apfel could not expand` | Apple Intelligence off, model not downloaded, apfel broken | the warning carries apfel's error; `apfel --model-info` |
+| Expansion identical to compressed, ~0% savings | old plugin version pre-warning — same apfel cause as above | `apfel --model-info` |
+| No savings line | `FAA_SHOW_SAVINGS=1` not in the launch environment | step 1 |
 
 ## Testing
 
