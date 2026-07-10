@@ -1,3 +1,10 @@
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="faa-speak — compressed out, readable in" width="480">
+  </picture>
+</div>
+
 # faa-speak
 
 Claude Code plugin that makes Claude respond in FAA-inspired compressed format to reduce output tokens, then expands the compressed text back to readable English using Apple's on-device foundation model (via [apfel](https://github.com/Arthur-Ficial/apfel)) at zero additional API cost.
