@@ -10,6 +10,7 @@
 # Env:
 #   APFEL=/path/to/apfel      override apfel discovery
 #   FAA_SHOW_COMPRESSED=1     print the raw compressed reply before the expansion
+#   FAA_SHOW_SAVINGS=1        print a compression-savings line (to stderr) after expansion
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -40,11 +41,24 @@ if [[ "$COMPRESSED" == *'<!-- faa -->'* ]]; then
     printf '%s\n\n' "$COMPRESSED"
   fi
   TEXT=${COMPRESSED//'<!-- faa -->'/}
-  if ! faa_expand_text "$TEXT"; then
-    # apfel unavailable mid-run — fall back to the compressed reply
-    printf '%s' "$COMPRESSED"
+  if [ "${FAA_SHOW_SAVINGS:-0}" = "1" ]; then
+    # capture (rather than stream) so the full expansion is available for the
+    # savings comparison; FAA_STREAM still gives progressive output on stderr
+    if EXPANDED=$(FAA_STREAM=1 faa_expand_text "$TEXT"); then
+      printf '%s' "$EXPANDED"
+    else
+      EXPANDED="$COMPRESSED"
+      printf '%s' "$COMPRESSED"
+    fi
+    printf '\n'
+    printf '%s\n' "$(faa_savings_line "$TEXT" "$EXPANDED")" >&2
+  else
+    if ! faa_expand_text "$TEXT"; then
+      # apfel unavailable mid-run — fall back to the compressed reply
+      printf '%s' "$COMPRESSED"
+    fi
+    printf '\n'
   fi
-  printf '\n'
 else
   printf '%s\n' "$COMPRESSED"
 fi

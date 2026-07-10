@@ -90,6 +90,7 @@ The wrapper loads the plugin with `--plugin-dir` and invokes `/faa-speak` explic
 | `APFEL=/path/to/apfel` | Override apfel discovery (also how the test suite stubs it) |
 | `FAA_DEBUG=1` | Hook logs the reason for any no-op to stderr (visible with `claude --debug`) |
 | `FAA_SHOW_COMPRESSED=1` | Wrapper prints the raw compressed reply before the expansion |
+| `FAA_SHOW_SAVINGS=1` | Reports compression savings (word/char counts) on expansion — appended to the hook's systemMessage, printed to stderr by the wrapper |
 
 ## Compression Examples
 
