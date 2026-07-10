@@ -48,8 +48,17 @@ tokenizes worse than `event`). The earning rule:
 
 > tokens(full form) − tokens(abbreviation) ≥ 1, measured in context
 
-Measure with the `count_tokens` API. Constant message overhead cancels when
-you subtract, and putting the word in a sentence keeps tokenization realistic:
+The easy path — no API key needed, just a logged-in `claude` CLI:
+
+```bash
+scripts/verify-deltas.sh          # measures every current entry + a built-in
+                                  # devops candidate set; prints KEEP/CUT/ADD/SKIP
+scripts/verify-deltas.sh my.txt   # your own candidates (lines: abbrev|full form)
+```
+
+Or measure by hand with the `count_tokens` API. Constant message overhead
+cancels when you subtract, and putting the word in a sentence keeps
+tokenization realistic:
 
 ```bash
 count() {
@@ -121,3 +130,51 @@ drift-tested:
 
 Keep `bench/extdict-plugin` around only while experimenting; the shipped
 plugin should carry exactly one dictionary.
+
+## Field notes: style priming beats glyph deltas (2026-07)
+
+We ran this process end-to-end and the results overturned the naive model of
+how the dictionary works. Short version: **the table's dominant mechanism is
+register priming, not per-glyph token savings.**
+
+What happened (all reproducible with the tools in this repo):
+
+1. `verify-deltas.sh` over the shipped 40-entry table: **only `async` has a
+   positive token delta.** Most entries are 0 (`fn`/`function` are each one
+   token); several invented ones are negative (`vld`, `evnt`, `rdr`,
+   `endpt`). Intuition failed in both directions — `k8s` measured **−2**.
+2. Web-mined candidates produced a measured 34-entry set (every entry ≥ +1:
+   `IAM`, `RBAC`, `SLA`, `PR`, `VM`, ... — see `bench/measured-plugin`).
+3. Whole-set A/B, **eight runs — the legacy table won all eight**:
+   - v1 (measured table, softened rules/examples): lost by 30–50 points
+   - v2 (byte-identical skill, table-only swap): still lost — isolates the
+     table contents as the causal variable
+   - v3 (v2 + explicit truncation-license rules): recovered roughly half the
+     gap, still lost (34%/14% vs 45%/38%)
+   - v4 (**additive**: legacy table fully intact, measured acronyms merely
+     *appended*): collapsed to 6%/3% vs 56%/37% — pure additions, each
+     individually token-positive, destroyed the savings
+
+Interpretation: a wall of aggressive truncations (`fn`, `chk`, `vld`) reads
+as *"this dialect compresses everything"* and licenses terse output across
+the whole response — worth ~30–50 points of savings. A list of professional
+acronyms (`IAM`, `SLA`) reads as ordinary prose register — and v4 shows the
+model **averages the register across the whole table**, so diluting the
+weird entries with normal-looking ones breaks the priming even when nothing
+is removed. The ~1-token-per-occurrence glyph deltas are noise by
+comparison.
+
+Practical rules this implies:
+
+- **The table is a style artifact, not a glossary.** Keep it small, dense,
+  and aggressive; its job is to set the register.
+- **Any table change — additions included — ships only through a whole-set
+  A/B win** (`bench.sh --ab`). Per-entry token deltas are necessary but
+  nowhere near sufficient; v4 proved individually-positive additions can be
+  collectively catastrophic.
+- Invented truncations prime hardest but expand worst (apfel misreads `vld`
+  far more often than it would `SLA`) — a real fidelity cost, currently paid
+  willingly because the priming is where the savings live.
+- The 2026-07 investigation tested removal, replacement, explicit-rule
+  substitution, and augmentation: **no variant beat the original table.**
+  The lab variants remain under `bench/` for reproduction.

@@ -1,0 +1,38 @@
+# DevOps dictionary candidates mined from public glossaries
+# (seed: itsvit.com "DevOps Glossary: 78 basic DevOps terms", curated + extended)
+#
+# Curation rules (docs/custom-dictionary.md §3):
+#   - standard, widely-understood short form only (no invented strings)
+#   - the LONG form must be something Claude writes in prose by default
+#   - excluded: product names (Docker, Jenkins, ...), terms already short
+#     (EC2, S3, DNS), previously-measured entries (k8s -2, IaC 0, HA 0)
+#
+# Verify: scripts/verify-deltas.sh bench/candidates-devops-web.txt
+#
+# format: abbreviation|full form
+canary|canary deployment
+cron|cron job
+config mgmt|configuration management
+VM|virtual machine
+ALB|application load balancer
+ASG|auto scaling group
+VPC|virtual private cloud
+IaaS|infrastructure as a service
+PaaS|platform as a service
+SaaS|software as a service
+RBAC|role-based access control
+ACL|access control list
+IAM|identity and access management
+CDN|content delivery network
+E2E|end-to-end
+RPS|requests per second
+OOM|out of memory
+WAF|web application firewall
+SRE|site reliability engineering
+SLI|service level indicator
+MTBF|mean time between failures
+RPO|recovery point objective
+RTO|recovery time objective
+pen test|penetration test
+prod|production
+TTL|time to live

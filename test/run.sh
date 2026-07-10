@@ -191,8 +191,19 @@ else
   fail "nodict variant forbids spontaneous abbreviation"
 fi
 if grep -qF '<!-- faa -->' "$NODSKILL"; then ok "nodict variant keeps the marker contract"; else fail "nodict variant keeps the marker contract"; fi
+MEAS="$ROOT/bench/measured-plugin"
+if jq -e '(.author | type) == "object" and .name == "faa-speak-measured"' "$MEAS/.claude-plugin/plugin.json" >/dev/null 2>&1; then
+  ok "measured variant manifest structurally valid"
+else
+  fail "measured variant manifest structurally valid"
+fi
+MEASSKILL="$MEAS/skills/faa-speak-measured/SKILL.md"
+if grep -qF '<!-- faa -->' "$MEASSKILL" 2>/dev/null; then ok "measured variant keeps the marker contract"; else fail "measured variant keeps the marker contract"; fi
+meas_entries=$(awk -F'|' '/^\| [A-Za-z]/ && $2 !~ /Short|Prefix|Abbr/ { c += ($2 ~ /[A-Za-z]/) + ($5 ~ /[A-Za-z]/) } END { print c + 0 }' "$MEASSKILL")
+assert_eq "measured variant (v4 additive) carries legacy 40 + measured 34, deduped (async overlaps)" "$meas_entries" "73"
 if bash -n "$ROOT/scripts/bench.sh" 2>/dev/null; then ok "bench.sh parses"; else fail "bench.sh parses"; fi
 if bash -n "$ROOT/scripts/mine-dict.sh" 2>/dev/null; then ok "mine-dict.sh parses"; else fail "mine-dict.sh parses"; fi
+if bash -n "$ROOT/scripts/verify-deltas.sh" 2>/dev/null; then ok "verify-deltas.sh parses"; else fail "verify-deltas.sh parses"; fi
 printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"the kubernetes deployment rollout needs a readiness probe and the connection pool exhausts quickly\n```bash\nignore_this_code_token\n```\n"}]}}' > "$TMP/mine-fixture.jsonl"
 MINED=$(TOP=5 MINCOUNT=1 MINLEN=5 bash "$ROOT/scripts/mine-dict.sh" "$TMP" 2>/dev/null)
 assert_contains "mine-dict finds unigram candidates" "$MINED" "kubernetes"
