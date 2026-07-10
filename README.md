@@ -267,6 +267,28 @@ scripts/bench.sh --ab                 # + no-dictionary arm over 10 prompts —
 
 The `--ab` comparison arm is swappable (`VARIANT_ROOT`/`VARIANT_SKILL`) — that's how candidate dictionaries get tested; see [Building a Custom Dictionary](#building-a-custom-dictionary).
 
+## How It Compares: Caveman Mode
+
+[Caveman](https://github.com/JuliusBrussee/caveman) is the best-known project in this space — it makes agents "talk like a caveman," reports ~65% average output savings on its own 10-prompt benchmark, ships for 30+ agents, and is honest about its limits. If you're evaluating this category, evaluate both. The structural difference:
+
+**Caveman compresses what the model says. faa-speak compresses what you pay for — and re-expands what you read.**
+
+| | faa-speak | Caveman |
+|---|---|---|
+| What you read | Plain English (free on-device re-expansion via Apple Intelligence) | Caveman-speak — the compressed form *is* the output |
+| Output savings | ~53% measured (10-prompt bench, tooling included) | ~65% claimed (their 10-prompt bench; methodologies differ) |
+| Scope | Claude Code, deeply integrated (Stop hook, systemMessage delivery, savings reporting, never-blocks-your-session contract) | 30+ agents, broadly integrated (skill-file drop) |
+| Input tokens | Untouched | Memory-file compression (~46% claimed) reduces future input |
+| Dictionary | Measurement-gated: every change A/B-tested; tools to mine + verify your own entries | Fixed style with intensity levels (lite/full/ultra) |
+| Auto-clarity | Compression auto-disengages for security warnings, irreversible ops, user confusion | Manual level toggle / "normal mode" |
+| Failure honesty | Expansion failures announce themselves with the underlying error | n/a — nothing to fail; output is already final |
+| Prerequisites | Compression: none. Expansion: macOS 26+, Apple Intelligence, [apfel](https://github.com/Arthur-Ficial/apfel) | Node ≥ 18 |
+| Verification | 72-check suite, CI, published self-audit with receipts | Benchmark + eval directories |
+
+**Why faa-speak, in one argument:** compressed output is only cheap if someone reads it, and with Caveman that someone is you, all day, every response. faa-speak closes the loop — the API bills you for the compressed tokens, and an on-device model (costing nothing and sending nothing anywhere) hands you readable English. You get the savings without adopting a dialect. The dictionary is also *earned* rather than assumed: every entry survived token-delta measurement, and the whole table survived eight adversarial A/B runs (documented in [docs/custom-dictionary.md](docs/custom-dictionary.md) — including the finding that compression tables work by style-priming, not glyph-swapping, which anyone building in this category will want to read).
+
+**When Caveman is the better choice, honestly:** you work across many agents (faa-speak is Claude Code only), you're not on an Apple Intelligence Mac (you'd get faa-speak's compression but read it raw — at which point the two products converge), you want input-token savings via memory-file compression (faa-speak doesn't touch input), or you simply enjoy reading grug. Both are MIT; nothing stops you benchmarking one against the other with `scripts/bench.sh` — we'd genuinely like to see the numbers.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
