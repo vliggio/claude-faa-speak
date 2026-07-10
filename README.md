@@ -51,6 +51,14 @@ claude plugin install faa-speak@faa-speak
 
 Verify the plugin loads: `claude plugin validate /path/to/claude-faa-speak`.
 
+### Desktop app
+
+1. Open **Settings → Plugins → Marketplaces**.
+2. Add marketplace: `vliggio/claude-faa-speak`.
+3. Find **faa-speak** in the marketplace list and click **Install**.
+
+No CLI needed — the desktop app has no `--plugin-dir` equivalent, so this is the only way to load it there.
+
 ## Usage
 
 ### Interactive (Claude Code)
@@ -109,26 +117,26 @@ The canonical dictionary lives in `lib/expansion.sh`; this table and the one in 
 
 | Abbr | Meaning | | Abbr | Meaning |
 |------|---------|---|------|---------|
-| fn | function | | env | environment |
-| ret | return | | srv | server |
-| impl | implementation | | param | parameter |
-| cfg | configuration | | arg | argument |
-| db | database | | val | value |
-| auth | authentication | | var | variable |
-| req | request | | obj | object |
-| res | response | | arr | array |
+| arg | argument | | init | initialize |
+| arr | array | | int | integer |
+| async | asynchronous | | iter | iteration |
+| auth | authentication | | msg | message |
+| bool | boolean | | mw | middleware |
+| cb | callback | | obj | object |
+| cfg | configuration | | param | parameter |
+| chk | check | | pkg | package |
+| cmp | component | | rdr | render |
+| db | database | | req | request |
+| del | delete | | res | response |
+| dep | dependency | | ret | return |
+| endpt | endpoint | | sig | signal |
+| env | environment | | srv | server |
 | err | error | | str | string |
-| dep | dependency | | int | integer |
-| pkg | package | | bool | boolean |
-| idx | index | | iter | iteration |
-| init | initialize | | tpl | template |
-| del | delete | | cmp | component |
-| upd | update | | rdr | render |
-| chk | check | | cb | callback |
-| vld | validate | | evnt | event |
-| msg | message | | sig | signal |
-| hdr | header | | async | asynchronous |
-| endpt | endpoint | | mw | middleware |
+| evnt | event | | tpl | template |
+| fn | function | | upd | update |
+| hdr | header | | val | value |
+| idx | index | | var | variable |
+| impl | implementation | | vld | validate |
 
 ## Building a Custom Dictionary
 

@@ -12,7 +12,7 @@
 
 # The canonical dictionary. skills/faa-speak/SKILL.md and README.md render this
 # same list as tables; test/run.sh fails if any copy drifts.
-FAA_DICT="fn=function ret=return impl=implementation cfg=configuration db=database auth=authentication req=request res=response err=error dep=dependency pkg=package idx=index init=initialize del=delete upd=update chk=check vld=validate msg=message hdr=header endpt=endpoint env=environment srv=server param=parameter arg=argument val=value var=variable obj=object arr=array str=string int=integer bool=boolean iter=iteration tpl=template cmp=component rdr=render cb=callback evnt=event sig=signal async=asynchronous mw=middleware"
+FAA_DICT="arg=argument arr=array async=asynchronous auth=authentication bool=boolean cb=callback cfg=configuration chk=check cmp=component db=database del=delete dep=dependency endpt=endpoint env=environment err=error evnt=event fn=function hdr=header idx=index impl=implementation init=initialize int=integer iter=iteration msg=message mw=middleware obj=object param=parameter pkg=package rdr=render req=request res=response ret=return sig=signal srv=server str=string tpl=template upd=update val=value var=variable vld=validate"
 
 EXPANSION_PROMPT="Expand abbreviated technical text to clear English.
 Abbreviations: ${FAA_DICT}
