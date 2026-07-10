@@ -18,7 +18,9 @@ The `<!-- faa -->` marker **at the end of the response** triggers expansion. A m
 SKILL.md controls Claude's output format
     → Claude emits compressed text + trailing <!-- faa --> marker
     → hooks.json wires Stop event to expand-output.sh (timeout: 30s)
-    → hook: cheap marker pre-check (tail of transcript) → extract last assistant text via jq
+    → hook: reads last_assistant_message from the hook input JSON
+      (transcript-file fallback + per-session dedupe for older Claude Code —
+      the transcript is written async and lags the Stop event)
     → lib: awk splits into \x1e-separated typed records (C=code, P=prose)
     → prose records piped through: apfel -s "$EXPANSION_PROMPT"; code records byte-identical
     → each segment streams to stderr as produced (partials survive a timeout kill)
@@ -60,5 +62,5 @@ claude --print --plugin-dir . "/faa-speak explain database connection pooling"
 ## Gotchas
 
 - Expansion runs for the main conversation only — `SubagentStop` is intentionally not wired.
-- The transcript extraction greps for the literal `"role":"assistant"` — a Claude Code transcript-serialization change would silently disable expansion; the fixtures in `test/fixtures/` pin the assumed shape.
+- The primary text source is `last_assistant_message` from the Stop-hook input. **Never rely on the transcript for the current turn** — it is written asynchronously and documented to lag the Stop event (we shipped that bug once). The transcript path is fallback-only, guarded by a per-session dedupe state; its `"role":"assistant"` grep is pinned by the fixtures in `test/fixtures/`.
 - Bash 3.2 (macOS default) — no `mapfile`, no associative arrays anywhere in this repo.
