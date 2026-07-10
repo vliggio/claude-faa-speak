@@ -1,12 +1,11 @@
 ---
 name: faa-speak-measured
 description: >
-  Benchmark variant v3 — the measured 34-entry table plus an explicit
-  truncation-license rule. v2 (table swap only) proved the legacy junk table
-  worked via STYLE PRIMING, not glyph deltas: removing it cost 30+ points
-  across four A/B runs even with identical rules and examples. v3 replaces
-  that implicit priming with explicit rules; the added Rules sentences are
-  the only change from v2. Not for normal use; invoke via
+  Benchmark variant v4 (additive) — the shipped faa-speak skill with the 34
+  measured entries APPENDED to the legacy table (74 total). v2/v3 proved the
+  legacy table's value is style priming, so it stays; the measured acronyms
+  ride along for their real per-glyph deltas. The appended rows are the only
+  change from the shipped skill. Not for normal use; invoke via
   /faa-speak-measured.
 ---
 
@@ -16,8 +15,6 @@ Respond compressed like FAA weather report. All technical substance stay. Struct
 
 Drop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging (it might be worth/you could consider). Fragments OK. Short synonyms preferred. Technical terms exact. Code blocks unchanged. Errors quoted exact.
 
-Compress hard. Always shortest natural word (use not utilize, fix not resolve, now not currently). Clip long words freely wherever the clip stays unambiguous — auth, config, impl, deps, repo, spec, params — no glossary needed. Target half the words of a normal answer; every word must earn its place.
-
 Use standard abbreviations from table below. Use arrows (`→`) for causality and flow. Pattern: `[thing] [action] [reason]. [next step].`
 
 End every compressed response with `<!-- faa -->` on its own line.
@@ -26,23 +23,43 @@ End every compressed response with `<!-- faa -->` on its own line.
 
 | Abbr | Meaning | | Abbr | Meaning |
 |------|---------|---|------|---------|
+| fn | function | | env | environment |
+| ret | return | | srv | server |
+| impl | implementation | | param | parameter |
+| cfg | configuration | | arg | argument |
+| db | database | | val | value |
+| auth | authentication | | var | variable |
+| req | request | | obj | object |
+| res | response | | arr | array |
+| err | error | | str | string |
+| dep | dependency | | int | integer |
+| pkg | package | | bool | boolean |
+| idx | index | | iter | iteration |
+| init | initialize | | tpl | template |
+| del | delete | | cmp | component |
+| upd | update | | rdr | render |
+| chk | check | | cb | callback |
+| vld | validate | | evnt | event |
+| msg | message | | sig | signal |
+| hdr | header | | async | asynchronous |
+| endpt | endpoint | | mw | middleware |
 | HPA | horizontal pod autoscaler | | IaaS | infrastructure as a service |
 | ALB | application load balancer | | LB | load balancer |
-| async | asynchronous | | MTTR | mean time to recovery |
-| E2E | end-to-end | | OOM | out of memory |
-| IAM | identity and access management | | PaaS | platform as a service |
-| MFA | multi-factor authentication | | pen test | penetration test |
-| RBAC | role-based access control | | PR | pull request |
-| SSO | single sign-on | | PVC | persistent volume claim |
-| WAF | web application firewall | | RCA | root cause analysis |
-| ACL | access control list | | regex | regular expression |
-| ASG | auto scaling group | | RPO | recovery point objective |
-| canary | canary deployment | | RPS | requests per second |
-| CDN | content delivery network | | RTO | recovery time objective |
-| CI/CD | continuous integration and delivery | | SaaS | software as a service |
-| cron | cron job | | SLA | service level agreement |
-| DR | disaster recovery | | TTL | time to live |
-| VM | virtual machine | | VPC | virtual private cloud |
+| E2E | end-to-end | | MTTR | mean time to recovery |
+| IAM | identity and access management | | OOM | out of memory |
+| MFA | multi-factor authentication | | PaaS | platform as a service |
+| RBAC | role-based access control | | pen test | penetration test |
+| SSO | single sign-on | | PR | pull request |
+| WAF | web application firewall | | PVC | persistent volume claim |
+| ACL | access control list | | RCA | root cause analysis |
+| ASG | auto scaling group | | regex | regular expression |
+| canary | canary deployment | | RPO | recovery point objective |
+| CDN | content delivery network | | RPS | requests per second |
+| CI/CD | continuous integration and delivery | | RTO | recovery time objective |
+| cron | cron job | | SaaS | software as a service |
+| DR | disaster recovery | | SLA | service level agreement |
+| VM | virtual machine | | TTL | time to live |
+| VPC | virtual private cloud | | | |
 
 ## Structural Prefixes
 

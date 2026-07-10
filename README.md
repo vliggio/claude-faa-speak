@@ -132,7 +132,7 @@ The canonical dictionary lives in `lib/expansion.sh`; this table and the one in 
 
 ## Building a Custom Dictionary
 
-The stock table is generic; your workload's vocabulary is not. The measured A/B showed the dictionary is worth ~8 points of savings on top of telegraphic style — and every entry also carries a cost (it grows apfel's expansion prompt and adds an ambiguity the small on-device expander can get wrong). So entries are added by measurement, not intuition:
+The stock table is generic; your workload's vocabulary is not. Two things are measured about it (details in [docs/custom-dictionary.md](docs/custom-dictionary.md)): most stock entries save ~0 tokens per occurrence, **and yet** removing them costs ~30 points of savings across six A/B runs — the table's real job is *style priming*, not glyph substitution. So the stock entries stay, additions are welcome, and both are gated by measurement, not intuition:
 
 **1. Mine candidates from your own transcripts.** Assistant text only; code, URLs, stopwords, and already-covered terms are stripped — the output is vocabulary and counts, never conversation content:
 

@@ -130,3 +130,41 @@ drift-tested:
 
 Keep `bench/extdict-plugin` around only while experimenting; the shipped
 plugin should carry exactly one dictionary.
+
+## Field notes: style priming beats glyph deltas (2026-07)
+
+We ran this process end-to-end and the results overturned the naive model of
+how the dictionary works. Short version: **the table's dominant mechanism is
+register priming, not per-glyph token savings.**
+
+What happened (all reproducible with the tools in this repo):
+
+1. `verify-deltas.sh` over the shipped 40-entry table: **only `async` has a
+   positive token delta.** Most entries are 0 (`fn`/`function` are each one
+   token); several invented ones are negative (`vld`, `evnt`, `rdr`,
+   `endpt`). Intuition failed in both directions — `k8s` measured **−2**.
+2. Web-mined candidates produced a measured 34-entry set (every entry ≥ +1:
+   `IAM`, `RBAC`, `SLA`, `PR`, `VM`, ... — see `bench/measured-plugin`).
+3. Whole-set A/B, **six runs**: the legacy table beat the measured set every
+   time — even with rules and examples held byte-identical (v2), and even
+   after adding an explicit truncation-license rule (v3, which narrowed the
+   gap by roughly half but still lost).
+
+Interpretation: a wall of aggressive truncations (`fn`, `chk`, `vld`) reads
+as *"this dialect compresses everything"* and licenses terse output across
+the whole response — worth ~30 points of savings. A list of professional
+acronyms (`IAM`, `SLA`) reads as ordinary prose register, so the model pads
+normally around it. The ~1-token-per-occurrence glyph deltas are noise by
+comparison.
+
+Practical rules this implies:
+
+- **The per-entry delta gate applies to *additions*.** It does not justify
+  *removing* legacy entries — removal changes the priming register, and only
+  a whole-set A/B (`bench.sh --ab`) can judge that.
+- **Never ship a table change on per-entry measurements alone.** Steps 4–5
+  above are not optional; they are where this finding was caught.
+- Invented truncations prime hardest but expand worst (apfel misreads `vld`
+  far more often than `SLA`). If you add measured acronyms for their real
+  deltas, add them *alongside* the priming entries, not instead of them —
+  and A/B the combined table too.
