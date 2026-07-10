@@ -23,7 +23,7 @@ if ! command -v claude >/dev/null 2>&1; then
 fi
 if ! faa_locate_apfel >/dev/null; then
   printf 'Error: apfel not found. Build it:\n' >&2
-  printf '  git clone https://github.com/vliggio/apfel ~/git/apfel && cd ~/git/apfel && swift build -c release\n' >&2
+  printf '  git clone https://github.com/Arthur-Ficial/apfel ~/git/apfel && cd ~/git/apfel && swift build -c release\n' >&2
   exit 1
 fi
 if [ $# -lt 1 ]; then

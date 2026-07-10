@@ -1,6 +1,6 @@
 # faa-speak
 
-Claude Code plugin that makes Claude respond in FAA-inspired compressed format to reduce output tokens, then expands the compressed text back to readable English using Apple's on-device foundation model (via [apfel](https://github.com/vliggio/apfel)) at zero additional API cost.
+Claude Code plugin that makes Claude respond in FAA-inspired compressed format to reduce output tokens, then expands the compressed text back to readable English using Apple's on-device foundation model (via [apfel](https://github.com/Arthur-Ficial/apfel)) at zero additional API cost.
 
 ## How It Works
 
@@ -31,7 +31,7 @@ Measured savings: **~53% of output tokens** (10-prompt `scripts/bench.sh --ab` r
 - **Xcode / Swift toolchain** (to build apfel)
 - **apfel** built and available:
   ```bash
-  git clone https://github.com/vliggio/apfel ~/git/apfel
+  git clone https://github.com/Arthur-Ficial/apfel ~/git/apfel
   cd ~/git/apfel && swift build -c release
   # Either add the binary to PATH, set APFEL=/path/to/apfel, or leave it at
   # ~/git/apfel/.build/release/apfel (the default search location)

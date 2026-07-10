@@ -7,12 +7,12 @@ strict, mechanical quality gates, so contributions tend to be quick.
 ## Development setup
 
 No build step. You need `bash`, `jq`, and (only for live end-to-end runs)
-[apfel](https://github.com/vliggio/apfel) on macOS 26+. The test suite needs
+[apfel](https://github.com/Arthur-Ficial/apfel) on macOS 26+. The test suite needs
 **neither apfel nor a Claude login** — apfel is stubbed via the `APFEL` env
 override and the `claude` CLI is shimmed:
 
 ```bash
-bash test/run.sh              # 48 checks: splitter, pipeline, hook, wrapper,
+bash test/run.sh              # full suite: splitter, pipeline, hook, wrapper,
                               # manifest, dictionary drift
 claude plugin validate .      # manifest check
 claude --plugin-dir . ...     # live-test your working copy in a session
