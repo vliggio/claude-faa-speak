@@ -94,13 +94,31 @@ else
   fi
   set +e
   LAST_LINES=$(grep '"role":"assistant"' -- "$TRANSCRIPT_PATH" 2>/dev/null | tail -n 100)
-  RAW=$(printf '%s\n' "$LAST_LINES" | jq -rs '
-    map(.message.content[]? | select(.type == "text") | .text) | last // ""
+  REC=$(printf '%s\n' "$LAST_LINES" | jq -rs '
+    map(select([.message.content[]? | select(.type == "text")] | length > 0))
+    | last // empty
+    | (.timestamp // "") + "\u001f"
+      + ([.message.content[]? | select(.type == "text") | .text] | join(""))
   ' 2>/dev/null)
   set -e
+  case "$REC" in
+    *$'\x1f'*) TS=${REC%%$'\x1f'*}; RAW=${REC#*$'\x1f'} ;;
+    *)         TS="";               RAW="$REC" ;;
+  esac
   if [ -z "$RAW" ]; then
     dbg "no assistant text found in transcript"
     exit 0
+  fi
+  # Staleness guard: a resumed session's transcript starts full of PRIOR
+  # conversation — never expand history. Anything older than ~2 minutes is
+  # not the response that triggered this Stop. (Fixtures without timestamps
+  # are exempt; real transcripts always carry one.)
+  if [ -n "$TS" ]; then
+    CUTOFF=$(date -u -v-120S +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '-120 seconds' +%Y-%m-%dT%H:%M:%S 2>/dev/null || echo "")
+    if [ -n "$CUTOFF" ] && [[ "${TS%%.*}" < "$CUTOFF" ]]; then
+      dbg "newest transcript text is stale (${TS}) — resumed session? skipping"
+      exit 0
+    fi
   fi
   if ! faa_gate "$RAW"; then
     dbg "marker absent or not at end of newest transcript text"

@@ -134,6 +134,17 @@ OUT2=$(printf '{"transcript_path":"%s","session_id":"dedupe-test"}' "$TEST_DIR/f
 case "$OUT1" in *systemMessage*) ok "fallback dedupe: first stop expands" ;; *) fail "fallback dedupe: first stop expands" ;; esac
 assert_empty "fallback dedupe: lagging transcript can never re-show the same text" "$OUT2"
 
+echo "=== hook: fallback staleness guard (resumed sessions) ==="
+jq -c '. + {timestamp: "2020-01-01T00:00:00.000Z"}' "$TEST_DIR/fixtures/single-line.jsonl" > "$TMP/stale.jsonl"
+run_hook "$TMP/stale.jsonl"
+assert_eq "stale transcript: exit 0" "$HOOK_RC" "0"
+assert_empty "stale transcript: prior-session history is never re-expanded" "$HOOK_OUT"
+
+jq -c --arg ts "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" '. + {timestamp: $ts}' "$TEST_DIR/fixtures/single-line.jsonl" > "$TMP/fresh.jsonl"
+run_hook "$TMP/fresh.jsonl"
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "fresh transcript: current-exchange text still expands" "$MSG" "auth mw reject valid tokens"
+
 echo "=== hook: apfel failure is announced, not impersonated ==="
 HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" FAA_SHOW_SAVINGS=1 APFEL="$FAIL_STUB" bash "$HOOK" 2>/dev/null)
 MSG=$(sysmsg "$HOOK_OUT")
@@ -255,8 +266,9 @@ assert_eq "measured variant (v4 additive) carries legacy 40 + measured 34, dedup
 if bash -n "$ROOT/scripts/bench.sh" 2>/dev/null; then ok "bench.sh parses"; else fail "bench.sh parses"; fi
 if bash -n "$ROOT/scripts/mine-dict.sh" 2>/dev/null; then ok "mine-dict.sh parses"; else fail "mine-dict.sh parses"; fi
 if bash -n "$ROOT/scripts/verify-deltas.sh" 2>/dev/null; then ok "verify-deltas.sh parses"; else fail "verify-deltas.sh parses"; fi
-printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"the kubernetes deployment rollout needs a readiness probe and the connection pool exhausts quickly\n```bash\nignore_this_code_token\n```\n"}]}}' > "$TMP/mine-fixture.jsonl"
-MINED=$(TOP=5 MINCOUNT=1 MINLEN=5 bash "$ROOT/scripts/mine-dict.sh" "$TMP" 2>/dev/null)
+mkdir -p "$TMP/mine"
+printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"the kubernetes deployment rollout needs a readiness probe and the connection pool exhausts quickly\n```bash\nignore_this_code_token\n```\n"}]}}' > "$TMP/mine/mine-fixture.jsonl"
+MINED=$(TOP=5 MINCOUNT=1 MINLEN=5 bash "$ROOT/scripts/mine-dict.sh" "$TMP/mine" 2>/dev/null)
 assert_contains "mine-dict finds unigram candidates" "$MINED" "kubernetes"
 assert_contains "mine-dict finds bigram phrases" "$MINED" "connection pool"
 case "$MINED" in *ignore_this_code_token*) fail "mine-dict strips code blocks" ;; *) ok "mine-dict strips code blocks" ;; esac
