@@ -145,26 +145,36 @@ What happened (all reproducible with the tools in this repo):
    `endpt`). Intuition failed in both directions — `k8s` measured **−2**.
 2. Web-mined candidates produced a measured 34-entry set (every entry ≥ +1:
    `IAM`, `RBAC`, `SLA`, `PR`, `VM`, ... — see `bench/measured-plugin`).
-3. Whole-set A/B, **six runs**: the legacy table beat the measured set every
-   time — even with rules and examples held byte-identical (v2), and even
-   after adding an explicit truncation-license rule (v3, which narrowed the
-   gap by roughly half but still lost).
+3. Whole-set A/B, **eight runs — the legacy table won all eight**:
+   - v1 (measured table, softened rules/examples): lost by 30–50 points
+   - v2 (byte-identical skill, table-only swap): still lost — isolates the
+     table contents as the causal variable
+   - v3 (v2 + explicit truncation-license rules): recovered roughly half the
+     gap, still lost (34%/14% vs 45%/38%)
+   - v4 (**additive**: legacy table fully intact, measured acronyms merely
+     *appended*): collapsed to 6%/3% vs 56%/37% — pure additions, each
+     individually token-positive, destroyed the savings
 
 Interpretation: a wall of aggressive truncations (`fn`, `chk`, `vld`) reads
 as *"this dialect compresses everything"* and licenses terse output across
-the whole response — worth ~30 points of savings. A list of professional
-acronyms (`IAM`, `SLA`) reads as ordinary prose register, so the model pads
-normally around it. The ~1-token-per-occurrence glyph deltas are noise by
+the whole response — worth ~30–50 points of savings. A list of professional
+acronyms (`IAM`, `SLA`) reads as ordinary prose register — and v4 shows the
+model **averages the register across the whole table**, so diluting the
+weird entries with normal-looking ones breaks the priming even when nothing
+is removed. The ~1-token-per-occurrence glyph deltas are noise by
 comparison.
 
 Practical rules this implies:
 
-- **The per-entry delta gate applies to *additions*.** It does not justify
-  *removing* legacy entries — removal changes the priming register, and only
-  a whole-set A/B (`bench.sh --ab`) can judge that.
-- **Never ship a table change on per-entry measurements alone.** Steps 4–5
-  above are not optional; they are where this finding was caught.
+- **The table is a style artifact, not a glossary.** Keep it small, dense,
+  and aggressive; its job is to set the register.
+- **Any table change — additions included — ships only through a whole-set
+  A/B win** (`bench.sh --ab`). Per-entry token deltas are necessary but
+  nowhere near sufficient; v4 proved individually-positive additions can be
+  collectively catastrophic.
 - Invented truncations prime hardest but expand worst (apfel misreads `vld`
-  far more often than `SLA`). If you add measured acronyms for their real
-  deltas, add them *alongside* the priming entries, not instead of them —
-  and A/B the combined table too.
+  far more often than it would `SLA`) — a real fidelity cost, currently paid
+  willingly because the priming is where the savings live.
+- The 2026-07 investigation tested removal, replacement, explicit-rule
+  substitution, and augmentation: **no variant beat the original table.**
+  The lab variants remain under `bench/` for reproduction.

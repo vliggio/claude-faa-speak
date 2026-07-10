@@ -1,7 +1,7 @@
 {
   "name": "faa-speak-measured",
   "version": "0.2.0",
-  "description": "Benchmark variant v4: shipped faa-speak skill plus the 34 measured entries appended (74-entry table) — additive A/B",
+  "description": "Benchmark lab variant (final state: v4 additive, 73-entry table). Verdict: lost 8/8 A/B runs to the shipped table — kept for reproduction; see docs/custom-dictionary.md field notes",
   "author": {
     "name": "vliggio"
   },

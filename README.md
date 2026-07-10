@@ -132,7 +132,7 @@ The canonical dictionary lives in `lib/expansion.sh`; this table and the one in 
 
 ## Building a Custom Dictionary
 
-The stock table is generic; your workload's vocabulary is not. Two things are measured about it (details in [docs/custom-dictionary.md](docs/custom-dictionary.md)): most stock entries save ~0 tokens per occurrence, **and yet** removing them costs ~30 points of savings across six A/B runs — the table's real job is *style priming*, not glyph substitution. So the stock entries stay, additions are welcome, and both are gated by measurement, not intuition:
+The stock table is generic; your workload's vocabulary is not. Before changing it, read the field notes in [docs/custom-dictionary.md](docs/custom-dictionary.md): most stock entries save ~0 tokens per occurrence, **and yet** the stock table won eight consecutive whole-set A/B runs — against removal, replacement, and even pure augmentation (appending measured acronyms diluted the priming and collapsed the savings). The table's real job is *style priming*, not glyph substitution, so every change — additions included — is gated by a whole-set `bench.sh --ab` win:
 
 **1. Mine candidates from your own transcripts.** Assistant text only; code, URLs, stopwords, and already-covered terms are stripped — the output is vocabulary and counts, never conversation content:
 
