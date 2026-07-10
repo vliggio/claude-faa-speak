@@ -6,9 +6,10 @@
 # Bash 3.2 compatible (macOS default).
 #
 # Env:
-#   APFEL       — path to the apfel binary (else PATH, else ~/git/apfel/.build/release/apfel)
-#   FAA_STREAM  — 1 to stream each expanded segment to stderr as it is produced
-#                 (preserves partial output if the hook is killed at its timeout)
+#   APFEL            — path to the apfel binary (else PATH, else ~/git/apfel/.build/release/apfel)
+#   FAA_STREAM       — 1 to stream each expanded segment to stderr as it is produced
+#                       (preserves partial output if the hook is killed at its timeout)
+#   FAA_SHOW_SAVINGS — 1 to report compression savings (word/char counts) on expansion
 
 # The canonical dictionary. skills/faa-speak/SKILL.md and README.md render this
 # same list as tables; test/run.sh fails if any copy drifts.
@@ -108,6 +109,24 @@ faa_expand_prose() {
   if [ -n "$buf" ]; then
     _faa_apfel_chunk "$buf"
   fi
+}
+
+# Builds a one-line compression-savings summary comparing compressed source
+# text to its expanded form (word/char counts, percent shorter). Prints to
+# stdout; callers redirect to a systemMessage, stderr, etc. as needed.
+faa_savings_line() {
+  local compressed="$1" expanded="$2" c_chars e_chars c_words e_words pct
+  c_chars=${#compressed}
+  e_chars=${#expanded}
+  c_words=$(printf '%s' "$compressed" | wc -w | tr -d '[:space:]')
+  e_words=$(printf '%s' "$expanded" | wc -w | tr -d '[:space:]')
+  if [ "${e_chars:-0}" -gt 0 ]; then
+    pct=$(( (e_chars - c_chars) * 100 / e_chars ))
+  else
+    pct=0
+  fi
+  printf 'faa-speak savings: %s words / %s chars compressed → %s words / %s chars expanded (~%s%% shorter)' \
+    "${c_words:-0}" "$c_chars" "${e_words:-0}" "$e_chars" "$pct"
 }
 
 # Full pipeline: split text into code/prose segments, expand prose via apfel,

@@ -75,6 +75,12 @@ if [ "$MARKS" -ge 2 ]; then ok "blank-line-free 520-word wall is hard-flushed in
 OUT=$(APFEL="$FAIL_STUB" faa_expand_text "apfel died mid run but text must survive fully")
 assert_contains "apfel failure falls back to original text" "$OUT" "apfel died mid run but text must survive fully"
 
+SAVINGS=$(faa_savings_line "short" "much longer expanded text here")
+assert_contains "savings line reports word/char counts" "$SAVINGS" "words / 5 chars compressed"
+assert_contains "savings line reports percent shorter" "$SAVINGS" "% shorter)"
+SAVINGS=$(faa_savings_line "text" "")
+assert_contains "savings line guards divide-by-zero on empty expansion" "$SAVINGS" "~0% shorter"
+
 echo "=== hook: end to end (fixtures) ==="
 run_hook "$TEST_DIR/fixtures/single-line.jsonl"
 assert_eq "single-line: exit 0" "$HOOK_RC" "0"
@@ -98,6 +104,13 @@ assert_empty "no-marker: no output" "$HOOK_OUT"
 run_hook "$TEST_DIR/fixtures/mid-marker.jsonl"
 assert_eq "mid-marker: exit 0" "$HOOK_RC" "0"
 assert_empty "mid-marker: quoting the marker mid-text does not trigger expansion (M3 regression)" "$HOOK_OUT"
+
+HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_SHOW_SAVINGS=1 APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "FAA_SHOW_SAVINGS=1: savings line appended to systemMessage" "$MSG" "faa-speak savings:"
+HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+case "$MSG" in *'faa-speak savings:'*) fail "savings line hidden by default" ;; *) ok "savings line hidden by default" ;; esac
 
 run_hook "$TMP/definitely-missing.jsonl"
 assert_eq "missing transcript: exit 0" "$HOOK_RC" "0"
@@ -132,6 +145,9 @@ assert_contains "wrapper: invokes the skill explicitly (H2 regression)" "$ARGS" 
 assert_contains "wrapper: prose expanded" "$OUT" "more prose from the shim here"
 CODE_ACTUAL=$(printf '%s\n' "$OUT" | awk '/^[ \t]*```/{print; f=!f; next} f{print}')
 assert_eq "wrapper: code block byte-identical (H3 regression)" "$CODE_ACTUAL" $'```py\nprint(1)\nprint(2)\n```'
+
+ERR=$(PATH="$TMP:$PATH" APFEL="$STUB" FAA_SHOW_SAVINGS=1 bash "$ROOT/scripts/faa-wrap.sh" "test question" 2>&1 >/dev/null)
+assert_contains "wrapper: FAA_SHOW_SAVINGS=1 reports savings on stderr" "$ERR" "faa-speak savings:"
 
 echo "=== manifest ==="
 if jq -e '.author | type == "object"' "$ROOT/.claude-plugin/plugin.json" >/dev/null 2>&1; then

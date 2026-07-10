@@ -7,7 +7,8 @@
 # Contract: never blocks the stop. The EXIT trap forces exit 0 on every path
 # (a Stop hook exiting 2 would block Claude from stopping; other nonzero exits
 # surface stderr noise). All failures degrade to a silent no-op — set
-# FAA_DEBUG=1 to see the reason for any no-op on stderr.
+# FAA_DEBUG=1 to see the reason for any no-op on stderr. Set
+# FAA_SHOW_SAVINGS=1 to append a compression-savings line to the systemMessage.
 set -euo pipefail
 trap 'exit 0' EXIT
 
@@ -89,6 +90,11 @@ fi
 # --- deliver visibly: systemMessage on stdout (exit 0) ---
 MSG="━━━ faa-speak expansion (via apfel) ━━━
 $EXPANDED"
+if [ "${FAA_SHOW_SAVINGS:-0}" = "1" ]; then
+  MSG="$MSG
+
+$(faa_savings_line "$TEXT" "$EXPANDED")"
+fi
 # systemMessage is capped at 10k chars; the full expansion always went to stderr
 if [ ${#MSG} -gt 9500 ]; then
   MSG="${MSG:0:9500}
