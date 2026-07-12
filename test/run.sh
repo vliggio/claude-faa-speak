@@ -77,6 +77,23 @@ OUT=$(APFEL="$MARK_STUB" faa_expand_text "$PURITY")
 assert_contains "closing-fence purity: inner \`\`\`js content stays code" "$OUT" \
   $'```\ncontent line\n```js\nstill inside block\n```'
 
+recs=$(printf 'text before here\n~~~py\ntilde code\n~~~\ntext after here\n' | faa_split_segments | record_types)
+assert_eq "splitter recognizes tilde fences (B7 regression)" "$recs" "PCP"
+TMIX=$'text before here\n~~~\ninner ``` fence line\nstill tilde code\n~~~\ntext after here'
+recs=$(printf '%s\n' "$TMIX" | faa_split_segments | record_types)
+assert_eq "backtick fence inside a tilde block stays code (fence char tracked)" "$recs" "PCP"
+OUT=$(APFEL="$MARK_STUB" faa_expand_text "$TMIX")
+assert_contains "tilde block passes through byte-identical" "$OUT" \
+  $'~~~\ninner ``` fence line\nstill tilde code\n~~~'
+
+# \x1e is the pipeline record separator — a stray one in model output must
+# not corrupt the framing (the byte is dropped; everything else survives).
+FRAME=$'prose has a stray \x1e framing byte here\n```js\ncode stays whole\n```\ntail prose is here'
+OUT=$(APFEL="$STUB" faa_expand_text "$FRAME")
+assert_contains "stray \\x1e byte: surrounding prose survives (B7 regression)" "$OUT" "prose has a stray  framing byte here"
+assert_contains "stray \\x1e byte: code block still byte-identical" "$OUT" $'```js\ncode stays whole\n```'
+assert_contains "stray \\x1e byte: trailing prose survives" "$OUT" "tail prose is here"
+
 echo "=== lib: expansion pipeline (stub = cat) ==="
 export APFEL="$STUB"
 IN=$'DX: issue | cause | fix\nsecond prose line with several more words here\nsee `cfg/db_pool.toml` and rerun `make db-init` after\n\n```bash\ncode line one\ncode line two\n```\ntrailing prose after code block here'
@@ -198,6 +215,32 @@ HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jso
 MSG=$(sysmsg "$HOOK_OUT")
 assert_contains "total apfel failure: apfel's own error reason surfaced" "$MSG" "Apple Intelligence not enabled"
 
+echo "=== hook: scratch-file hygiene (B7) ==="
+SDIR=$(mktemp -d "$TMP/state.XXXXXX")
+printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$SDIR" APFEL="$FAIL_STUB" bash "$HOOK" >/dev/null 2>&1
+LEFT=$(find "$SDIR" \( -name 'faa-fellback-*' -o -name 'faa-apfel-err-*' \) -type f 2>/dev/null | grep -c . || true)
+assert_eq "hook removes its scratch files on exit (B7 regression)" "$LEFT" "0"
+
+SDIR=$(mktemp -d "$TMP/state.XXXXXX")
+touch "$SDIR/faa-last-deadsession" "$SDIR/faa-fellback-99999"
+touch -t 202001010000 "$SDIR/faa-last-deadsession" "$SDIR/faa-fellback-99999"
+printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$SDIR" APFEL="$STUB" bash "$HOOK" >/dev/null 2>&1
+if [ ! -e "$SDIR/faa-last-deadsession" ] && [ ! -e "$SDIR/faa-fellback-99999" ]; then
+  ok "hook purges week-old state/scratch from dead sessions (B7 regression)"
+else
+  fail "hook purges week-old state/scratch from dead sessions"
+fi
+
+echo "=== hook: oversized expansion (systemMessage cap) ==="
+BIG=""
+i=0
+while [ $i -lt 400 ]; do BIG="${BIG}filler line $i with several padding words to overflow the cap"$'\n'; i=$((i + 1)); done
+BIG="$BIG"$'\n<!-- faa -->'
+HOOK_OUT=$(jq -n --arg m "$BIG" '{last_assistant_message: $m}' | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "oversized expansion: truncation notice is honest about --debug (B6 regression)" "$MSG" 'claude --debug'
+if [ ${#MSG} -le 9700 ]; then ok "oversized expansion: systemMessage capped at ~9.5k chars"; else fail "oversized expansion: systemMessage capped (got ${#MSG} chars)"; fi
+
 run_hook "$TMP/definitely-missing.jsonl"
 assert_eq "missing transcript: exit 0" "$HOOK_RC" "0"
 assert_empty "missing transcript: no output" "$HOOK_OUT"
@@ -247,6 +290,12 @@ OUT=$(PATH="$TMP/shim-midmarker:$PATH" APFEL="$MARK_STUB" bash "$ROOT/scripts/fa
 assert_eq "wrapper: mid-text marker exit 0" "$RC" "0"
 case "$OUT" in *"«E»"*) fail "wrapper: quoting the marker mid-text does not trigger expansion (B4 regression)" ;; *) ok "wrapper: quoting the marker mid-text does not trigger expansion (B4 regression)" ;; esac
 assert_contains "wrapper: quoted marker survives verbatim (B4 regression)" "$OUT" 'looks like <!-- faa --> to responses'
+
+# Same failure honesty as the hook: apfel fallbacks are announced, not silent.
+ERR=$(PATH="$TMP:$PATH" APFEL="$FAIL_STUB" bash "$ROOT/scripts/faa-wrap.sh" "test question" 2>&1 >/dev/null)
+assert_contains "wrapper announces apfel fallback on stderr (B7 regression)" "$ERR" "could not be expanded"
+OUT=$(PATH="$TMP:$PATH" APFEL="$FAIL_STUB" bash "$ROOT/scripts/faa-wrap.sh" "test question" 2>/dev/null)
+assert_contains "wrapper fallback still delivers the compressed text" "$OUT" "more prose from the shim here"
 
 echo "=== manifest ==="
 if jq -e '.author | type == "object"' "$ROOT/.claude-plugin/plugin.json" >/dev/null 2>&1; then

@@ -56,24 +56,26 @@ faa_gate() {
 
 # Split stdin into \x1e-separated records, each prefixed with a one-char type:
 # "C" = fenced code block (passed through verbatim), "P" = prose.
-# Fences may be indented (list-nested code blocks). Fence length is tracked
-# per CommonMark: a block opened with N backticks closes only on a fence of
-# >= N backticks with nothing after it — so a ```-fenced example inside a
-# ````-fenced block stays code, and an info-string line (```js) never closes
-# an open block.
+# Fences may be indented (list-nested code blocks) and use backticks or
+# tildes. Fence tracking follows CommonMark: a block opened with N fence
+# chars closes only on >= N of the SAME char with nothing after them — so a
+# ```-fenced example inside a ````- or ~~~-fenced block stays code, and an
+# info-string line (```js) never closes an open block. Indented (4-space,
+# unfenced) code blocks are NOT recognized — SKILL.md instructs fenced output.
 faa_split_segments() {
   awk '
-    BEGIN { in_code = 0; buf = ""; fence = 0 }
-    /^[ \t]*```/ {
+    BEGIN { in_code = 0; buf = ""; fence = 0; fchar = "" }
+    /^[ \t]*(```|~~~)/ {
       line = $0
       sub(/^[ \t]*/, "", line)
+      c = substr(line, 1, 1)
       len = 0
-      while (substr(line, len + 1, 1) == "`") len++
+      while (substr(line, len + 1, 1) == c) len++
       rest = substr(line, len + 1)
       if (!in_code) {
         if (buf != "") printf "P%s\036", buf
-        buf = $0 "\n"; in_code = 1; fence = len
-      } else if (len >= fence && rest ~ /^[ \t]*$/) {
+        buf = $0 "\n"; in_code = 1; fence = len; fchar = c
+      } else if (c == fchar && len >= fence && rest ~ /^[ \t]*$/) {
         buf = buf $0 "\n"
         printf "C%s\036", buf
         buf = ""; in_code = 0
@@ -201,6 +203,9 @@ faa_savings_line() {
 # Full pipeline: split text into code/prose segments, expand prose via apfel,
 # pass code through byte-identical, print the reassembled result to stdout.
 # With FAA_STREAM=1, each segment is also written to stderr as it completes.
+# \x1e is the record separator, so any literal \x1e byte in the text is
+# dropped up front — otherwise it would corrupt the framing (losing one
+# never-legitimately-printable control byte beats mangling whole segments).
 faa_expand_text() {
   local text="$1" seg type content piece
   FAA_APFEL=$(faa_locate_apfel) || return 1
@@ -216,5 +221,5 @@ faa_expand_text() {
       printf '%s' "$piece" >&2
     fi
     printf '%s' "$piece"
-  done < <(printf '%s\n' "$text" | faa_split_segments)
+  done < <(printf '%s\n' "$text" | tr -d '\036' | faa_split_segments)
 }

@@ -1,7 +1,7 @@
 ---
 name: faa-speak
 description: >
-  FAA-inspired compressed output mode. Reduces output tokens (~50% measured
+  FAA-inspired compressed output mode. Reduces output tokens (~53% measured
   on bundled benchmarks — scripts/bench.sh) using structured abbreviations,
   positional patterns, and telegraphic style while keeping full technical
   accuracy. Like METAR for code talk. Use when user says "faa mode",

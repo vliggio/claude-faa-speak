@@ -41,13 +41,18 @@ COMPRESSED=$(claude --print --plugin-dir "$PLUGIN_ROOT" "/faa-speak $*")
 # mid-text passes through verbatim, marker intact. On success TEXT holds the
 # reply with the trailing marker stripped.
 if faa_gate "$COMPRESSED"; then
+  # Same failure honesty as the hook: per-chunk apfel failures fall back to
+  # the compressed text AND are announced on stderr, never silently mixed in.
+  FALLBACK_FLAG=$(mktemp "${TMPDIR:-/tmp}/faa-wrap-fellback.XXXXXX")
+  APFEL_ERR=$(mktemp "${TMPDIR:-/tmp}/faa-wrap-apfel-err.XXXXXX")
+  trap 'rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR"' EXIT
   if [ "${FAA_SHOW_COMPRESSED:-0}" = "1" ]; then
     printf '%s\n\n' "$COMPRESSED"
   fi
   if [ "${FAA_SHOW_SAVINGS:-0}" = "1" ]; then
     # capture (rather than stream) so the full expansion is available for the
     # savings comparison; FAA_STREAM still gives progressive output on stderr
-    if EXPANDED=$(FAA_STREAM=1 faa_expand_text "$TEXT"); then
+    if EXPANDED=$(FAA_STREAM=1 FAA_FALLBACK_FLAG="$FALLBACK_FLAG" FAA_APFEL_ERR="$APFEL_ERR" faa_expand_text "$TEXT"); then
       printf '%s' "$EXPANDED"
     else
       EXPANDED="$COMPRESSED"
@@ -56,11 +61,15 @@ if faa_gate "$COMPRESSED"; then
     printf '\n'
     printf '%s\n' "$(faa_savings_line "$TEXT" "$EXPANDED")" >&2
   else
-    if ! faa_expand_text "$TEXT"; then
+    if ! FAA_FALLBACK_FLAG="$FALLBACK_FLAG" FAA_APFEL_ERR="$APFEL_ERR" faa_expand_text "$TEXT"; then
       # apfel unavailable mid-run — fall back to the compressed reply
       printf '%s' "$COMPRESSED"
     fi
     printf '\n'
+  fi
+  if [ -s "$FALLBACK_FLAG" ]; then
+    APFEL_REASON=$(head -1 -- "$APFEL_ERR" 2>/dev/null || true)
+    printf '⚠ faa-speak: some segments could not be expanded (apfel error%s) — shown compressed\n' "${APFEL_REASON:+: ${APFEL_REASON}}" >&2
   fi
 else
   printf '%s\n' "$COMPRESSED"
