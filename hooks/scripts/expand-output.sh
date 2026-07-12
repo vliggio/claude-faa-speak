@@ -18,7 +18,20 @@
 # working expansion. Set FAA_SHOW_SAVINGS=1 to append a compression-savings
 # line to the systemMessage.
 set -euo pipefail
-trap 'exit 0' EXIT
+# Never block the stop, and never litter: every exit path — including a
+# TERM/INT from the hook timeout — removes this invocation's scratch files.
+# (The dedupe STATE file intentionally survives: it must persist across
+# stops within a session; stale ones are purged below.)
+FALLBACK_FLAG=""
+APFEL_ERR=""
+# shellcheck disable=SC2329,SC2317  # invoked from the EXIT trap string below (older shellchecks flag the body as unreachable)
+faa_scratch_cleanup() {
+  if [ -n "$FALLBACK_FLAG" ]; then rm -f -- "$FALLBACK_FLAG" 2>/dev/null || true; fi
+  if [ -n "$APFEL_ERR" ]; then rm -f -- "$APFEL_ERR" 2>/dev/null || true; fi
+  return 0
+}
+trap 'faa_scratch_cleanup; exit 0' EXIT
+trap 'exit 0' TERM INT HUP
 
 # GNU tools in the C locale can abort on UTF-8 bytes; pin a UTF-8 locale.
 export LC_ALL="${LC_ALL:-en_US.UTF-8}"
@@ -50,17 +63,8 @@ if [ "$FAA_DEBUG" = "1" ]; then
 fi
 SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 
-# Marker gate: accept only text that ENDS with the marker; strips it and
-# surrounding whitespace into TEXT. Returns 1 when the gate fails.
-faa_gate() {
-  local t="$1"
-  while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
-  if [[ "$t" != *'<!-- faa -->' ]]; then return 1; fi
-  t=${t%'<!-- faa -->'}
-  while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
-  if [ -z "$t" ]; then return 1; fi
-  TEXT="$t"
-}
+# Marker gate: faa_gate (lib/expansion.sh) — accepts only text that ENDS
+# with the marker, strips it and surrounding whitespace into TEXT.
 
 # Dedupe state: never expand the same text twice in one session (the
 # transcript fallback can only see the PREVIOUS turn, so without this it
@@ -68,6 +72,9 @@ faa_gate() {
 STATE_DIR="${FAA_STATE_DIR:-${TMPDIR:-/tmp}}"
 STATE="$STATE_DIR/faa-last-${SESSION_ID:-nosession}"
 sig_of() { printf '%s' "$1" | cksum | tr -d ' \t'; }
+# Opportunistic purge: dedupe state from dead sessions and scratch files
+# orphaned by a SIGKILLed run (the EXIT trap can't fire on SIGKILL).
+find "$STATE_DIR" -maxdepth 1 \( -name 'faa-last-*' -o -name 'faa-fellback-*' -o -name 'faa-apfel-err-*' \) -mtime +7 -delete 2>/dev/null || true
 
 TEXT=""
 # --- primary source: the response text delivered in the hook input ---
@@ -149,7 +156,6 @@ if [ -s "$FALLBACK_FLAG" ] && [ "$(sig_of "$EXPANDED")" = "$(sig_of "$TEXT")" ];
   # Every chunk failed and the "expansion" is just the original text: say so
   # instead of impersonating a working expansion with a 0% savings line.
   APFEL_REASON=$(head -1 -- "$APFEL_ERR" 2>/dev/null || true)
-  rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR" 2>/dev/null || true
   jq -n --arg msg "⚠ faa-speak: apfel could not expand this response${APFEL_REASON:+ — ${APFEL_REASON}}
 Compressed text shown as-is. Diagnose with: apfel --model-info" '{systemMessage: $msg}'
   exit 0
@@ -161,16 +167,17 @@ if [ -s "$FALLBACK_FLAG" ]; then
 
 ⚠ some segments could not be expanded (apfel error) — shown compressed"
 fi
-rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR" 2>/dev/null || true
 if [ "${FAA_SHOW_SAVINGS:-0}" = "1" ]; then
   MSG="$MSG
 
 $(faa_savings_line "$TEXT" "$EXPANDED")"
 fi
-# systemMessage is capped at 10k chars; the full expansion always went to stderr
+# systemMessage is capped at 10k chars; the full expansion always went to
+# stderr — but stderr reaches the debug log only under `claude --debug`, so
+# the notice must not promise a log that usually doesn't exist.
 if [ ${#MSG} -gt 9500 ]; then
   MSG="${MSG:0:9500}
-… [truncated — full expansion in the debug log]"
+… [truncated at ~9.5k chars — the compressed response above is complete; the full expansion is logged only when running \`claude --debug\`]"
 fi
 jq -n --arg msg "$MSG" '{systemMessage: $msg}'
 exit 0
