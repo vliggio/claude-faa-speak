@@ -133,6 +133,14 @@ assert_eq "multi-line 520-word wall: line-accumulated chunks stay capped" "$SIZE
 OUT=$(APFEL="$FAIL_STUB" faa_expand_text "apfel died mid run but text must survive fully")
 assert_contains "apfel failure falls back to original text" "$OUT" "apfel died mid run but text must survive fully"
 
+echo "=== lib: expansion deadline (P7 — partial result instead of timeout loss) ==="
+DFLAG="$TMP/deadline-flag"
+rm -f "$DFLAG"
+OUT=$(FAA_DEADLINE=0 FAA_DEADLINE_FLAG="$DFLAG" APFEL="$MARK_STUB" faa_expand_text "deadline passthrough text must survive fully intact")
+assert_contains "deadline: text passes through compressed, not lost" "$OUT" "deadline passthrough text must survive fully intact"
+case "$OUT" in *"«E»"*) fail "deadline: apfel is not invoked past the deadline" ;; *) ok "deadline: apfel is not invoked past the deadline" ;; esac
+if [ -s "$DFLAG" ]; then ok "deadline: flag file records the cutoff"; else fail "deadline: flag file records the cutoff"; fi
+
 SAVINGS=$(faa_savings_line "short" "much longer expanded text here")
 assert_contains "savings line reports word/char counts" "$SAVINGS" "words / 5 chars compressed"
 assert_contains "savings line reports percent shorter" "$SAVINGS" "% shorter)"
@@ -214,6 +222,15 @@ printf '#!/usr/bin/env bash\necho "error: Model unavailable (Apple Intelligence 
 HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" APFEL="$REASON_STUB" bash "$HOOK" 2>/dev/null)
 MSG=$(sysmsg "$HOOK_OUT")
 assert_contains "total apfel failure: apfel's own error reason surfaced" "$MSG" "Apple Intelligence not enabled"
+
+echo "=== hook: expansion deadline (P7) ==="
+HOOK_OUT=$(printf '{"transcript_path":"%s"}' "$TEST_DIR/fixtures/single-line.jsonl" | FAA_STATE_DIR="$(mktemp -d "$TMP/state.XXXXXX")" FAA_DEADLINE=0 APFEL="$STUB" bash "$HOOK" 2>/dev/null)
+MSG=$(sysmsg "$HOOK_OUT")
+assert_contains "hook deadline: time-budget notice appended" "$MSG" "time budget"
+assert_contains "hook deadline: compressed text still delivered" "$MSG" "auth mw reject valid tokens"
+run_hook "$TEST_DIR/fixtures/single-line.jsonl"
+MSG=$(sysmsg "$HOOK_OUT")
+case "$MSG" in *"time budget"*) fail "hook deadline: no notice when expansion finishes in time" ;; *) ok "hook deadline: no notice when expansion finishes in time" ;; esac
 
 echo "=== hook: scratch-file hygiene (B7) ==="
 SDIR=$(mktemp -d "$TMP/state.XXXXXX")
@@ -365,9 +382,66 @@ MEASSKILL="$MEAS/skills/faa-speak-measured/SKILL.md"
 if grep -qF '<!-- faa -->' "$MEASSKILL" 2>/dev/null; then ok "measured variant keeps the marker contract"; else fail "measured variant keeps the marker contract"; fi
 meas_entries=$(awk -F'|' '/^\| [A-Za-z]/ && $2 !~ /Short|Prefix|Abbr/ { c += ($2 ~ /[A-Za-z]/) + ($5 ~ /[A-Za-z]/) } END { print c + 0 }' "$MEASSKILL")
 assert_eq "measured variant (v4 additive) carries legacy 40 + measured 34, deduped (async overlaps)" "$meas_entries" "73"
+
+echo "=== bench: tableless controlled arm (P3 — table-only isolation) ==="
+TABLELESS="$ROOT/bench/tableless-plugin"
+if jq -e '(.author | type) == "object" and .name == "faa-speak-tableless"' "$TABLELESS/.claude-plugin/plugin.json" >/dev/null 2>&1; then
+  ok "tableless variant manifest structurally valid"
+else
+  fail "tableless variant manifest structurally valid"
+fi
+TLSKILL="$TABLELESS/skills/faa-speak-tableless/SKILL.md"
+if grep -qF '<!-- faa -->' "$TLSKILL" 2>/dev/null; then ok "tableless variant keeps the marker contract"; else fail "tableless variant keeps the marker contract"; fi
+# The controlled-arm guarantee: the body must be EXACTLY the shipped skill
+# with only the abbreviation table removed (and the sentence that references
+# it). Regenerate the expected body from the shipped skill and compare — if
+# the shipped skill changes without this variant, the A/B silently stops
+# isolating the table and this fails.
+strip_fm() { awk 'BEGIN { fm = 0 } /^---$/ && fm < 2 { fm++; next } fm < 2 { next } { print }' "$1"; }
+tableless_expected() {
+  awk 'BEGIN { fm = 0 } /^---$/ && fm < 2 { fm++; next } fm < 2 { next } /^## Abbreviations$/ { skip = 1; next } /^## / { skip = 0 } !skip { print }' \
+    "$ROOT/skills/faa-speak/SKILL.md" | sed 's/ from table below\./\./'
+}
+if [ "$(tableless_expected)" = "$(strip_fm "$TLSKILL")" ]; then
+  ok "tableless variant differs from shipped skill by the table ONLY (controlled-arm drift test)"
+else
+  fail "tableless variant differs from shipped skill by the table ONLY (controlled-arm drift test)"
+  diff <(tableless_expected) <(strip_fm "$TLSKILL") | head -8
+fi
+
+echo "=== tier-1 tooling: bench flags, addressable measure, fidelity harness ==="
+mkdir -p "$TMP/shim-bench"
+cat > "$TMP/shim-bench/claude" <<'EOF'
+#!/usr/bin/env bash
+printf '{"usage":{"output_tokens":100}}\n'
+EOF
+chmod +x "$TMP/shim-bench/claude"
+BOUT=$(PATH="$TMP/shim-bench:$PATH" bash "$ROOT/scripts/bench.sh" --runs 2 --concise "sample question" 2>/dev/null); BRC=$?
+assert_eq "bench --runs: exit 0 (claude shimmed)" "$BRC" "0"
+assert_contains "bench --runs: multi-run summary with spread" "$BOUT" "SUMMARY over 2 runs"
+assert_contains "bench --concise: readable-baseline arm reported" "$BOUT" "concise:"
+
+mkdir -p "$TMP/addr"
+cat > "$TMP/addr/t.jsonl" <<'EOF'
+{"message":{"role":"assistant","id":"m1","usage":{"output_tokens":100},"content":[{"type":"text","text":"prose words here\n```\ncode here\n```"}]}}
+{"message":{"role":"assistant","id":"m1","usage":{"output_tokens":100},"content":[{"type":"tool_use","input":{"cmd":"12345678901234567890"}}]}}
+EOF
+AOUT=$(bash "$ROOT/scripts/measure-addressable.sh" "$TMP/addr" 2>/dev/null); ARC=$?
+assert_eq "measure-addressable: exit 0" "$ARC" "0"
+assert_contains "measure-addressable: usage deduped across blocks of one message" "$AOUT" "billed output tokens (usage, deduped): 100"
+assert_contains "measure-addressable: reports the NET savings projection" "$AOUT" "NET savings"
+
+FOUT=$(APFEL="$ROOT/test/fidelity/ref-expander.sh" bash "$ROOT/test/fidelity/run.sh" 2>/dev/null); FRC=$?
+assert_eq "fidelity harness: all pairs pass under the reference expander" "$FRC" "0"
+assert_contains "fidelity harness: 8 golden pairs run" "$FOUT" "8 passed, 0 failed"
+FOUT=$(APFEL="$FAIL_STUB" bash "$ROOT/test/fidelity/run.sh" 2>/dev/null); FRC=$?
+assert_eq "fidelity harness: unusable expander skips with exit 0" "$FRC" "0"
+assert_contains "fidelity harness: skip explains itself" "$FOUT" "SKIP"
 if bash -n "$ROOT/scripts/bench.sh" 2>/dev/null; then ok "bench.sh parses"; else fail "bench.sh parses"; fi
 if bash -n "$ROOT/scripts/mine-dict.sh" 2>/dev/null; then ok "mine-dict.sh parses"; else fail "mine-dict.sh parses"; fi
 if bash -n "$ROOT/scripts/verify-deltas.sh" 2>/dev/null; then ok "verify-deltas.sh parses"; else fail "verify-deltas.sh parses"; fi
+if bash -n "$ROOT/scripts/judge-parity.sh" 2>/dev/null; then ok "judge-parity.sh parses (P1 parity check)"; else fail "judge-parity.sh parses"; fi
+if bash -n "$ROOT/scripts/check-autoclarity.sh" 2>/dev/null; then ok "check-autoclarity.sh parses (P7 auto-clarity check)"; else fail "check-autoclarity.sh parses"; fi
 mkdir -p "$TMP/mine"
 printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"the kubernetes deployment rollout needs a readiness probe and the connection pool exhausts quickly\n```bash\nignore_this_code_token\n```\n"}]}}' > "$TMP/mine/mine-fixture.jsonl"
 MINED=$(TOP=5 MINCOUNT=1 MINLEN=5 bash "$ROOT/scripts/mine-dict.sh" "$TMP/mine" 2>/dev/null)

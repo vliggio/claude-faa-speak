@@ -1,0 +1,10 @@
+Prose around a fenced block: the block must be byte-identical, both prose
+segments must expand.
+=== input ===
+DX: init script fails on macOS | `readlink -f` unsupported on BSD | patch below, rerun install
+```bash
+python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
+```
+after patch: rerun `./install.sh --verify` and chk srv status
+=== must-contain ===
+./install.sh --verify

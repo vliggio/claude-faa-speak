@@ -1,0 +1,3 @@
+CLI flags with values inside backticks must survive byte-identical.
+=== input ===
+srv boot fails when `--max-conns=0` set | zero disables pool init | set `--max-conns=64` or drop flag, then `systemctl restart api`

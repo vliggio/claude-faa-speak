@@ -24,10 +24,12 @@ set -euo pipefail
 # stops within a session; stale ones are purged below.)
 FALLBACK_FLAG=""
 APFEL_ERR=""
+DEADLINE_FLAG=""
 # shellcheck disable=SC2329,SC2317  # invoked from the EXIT trap string below (older shellchecks flag the body as unreachable)
 faa_scratch_cleanup() {
   if [ -n "$FALLBACK_FLAG" ]; then rm -f -- "$FALLBACK_FLAG" 2>/dev/null || true; fi
   if [ -n "$APFEL_ERR" ]; then rm -f -- "$APFEL_ERR" 2>/dev/null || true; fi
+  if [ -n "$DEADLINE_FLAG" ]; then rm -f -- "$DEADLINE_FLAG" 2>/dev/null || true; fi
   return 0
 }
 trap 'faa_scratch_cleanup; exit 0' EXIT
@@ -138,11 +140,17 @@ else
 fi
 
 # --- expand (streams segments to stderr; accumulates for systemMessage) ---
+# FAA_DEADLINE: internal budget in seconds (since hook start) after which
+# remaining chunks pass through compressed — always less than hooks.json's
+# 30s timeout, so a slow expansion delivers a partial result instead of
+# being killed with nothing visible.
+FAA_DEADLINE="${FAA_DEADLINE:-22}"
 FALLBACK_FLAG="$STATE_DIR/faa-fellback-$$"
 APFEL_ERR="$STATE_DIR/faa-apfel-err-$$"
-rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR" 2>/dev/null || true
-printf '━━━ faa-speak expansion (via apfel) ━━━\n' >&2
-EXPANDED=$(FAA_STREAM=1 FAA_FALLBACK_FLAG="$FALLBACK_FLAG" FAA_APFEL_ERR="$APFEL_ERR" faa_expand_text "$TEXT") || EXPANDED=""
+DEADLINE_FLAG="$STATE_DIR/faa-deadline-$$"
+rm -f -- "$FALLBACK_FLAG" "$APFEL_ERR" "$DEADLINE_FLAG" 2>/dev/null || true
+printf '━━━ faa-speak expansion (apfel paraphrase) ━━━\n' >&2
+EXPANDED=$(FAA_STREAM=1 FAA_DEADLINE="$FAA_DEADLINE" FAA_DEADLINE_FLAG="$DEADLINE_FLAG" FAA_FALLBACK_FLAG="$FALLBACK_FLAG" FAA_APFEL_ERR="$APFEL_ERR" faa_expand_text "$TEXT") || EXPANDED=""
 printf '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' >&2
 
 if [ -z "$EXPANDED" ]; then
@@ -160,12 +168,17 @@ if [ -s "$FALLBACK_FLAG" ] && [ "$(sig_of "$EXPANDED")" = "$(sig_of "$TEXT")" ];
 Compressed text shown as-is. Diagnose with: apfel --model-info" '{systemMessage: $msg}'
   exit 0
 fi
-MSG="━━━ faa-speak expansion (via apfel) ━━━
+MSG="━━━ faa-speak expansion (apfel paraphrase — the compressed original above is authoritative) ━━━
 $EXPANDED"
 if [ -s "$FALLBACK_FLAG" ]; then
   MSG="$MSG
 
 ⚠ some segments could not be expanded (apfel error) — shown compressed"
+fi
+if [ -s "$DEADLINE_FLAG" ]; then
+  MSG="$MSG
+
+⚠ expansion time budget (~${FAA_DEADLINE}s) reached — remaining segments shown compressed"
 fi
 if [ "${FAA_SHOW_SAVINGS:-0}" = "1" ]; then
   MSG="$MSG

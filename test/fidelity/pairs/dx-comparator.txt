@@ -1,0 +1,6 @@
+The comparator class: precision-critical operators travel in backticks; the
+generic span check catches any mutation (< vs <= inversion is the classic).
+=== input ===
+DX: auth mw reject valid tokens | expiry chk uses `<` not `<=` | fix: change to `<=` in `token_validator.rs:47`
+=== must-contain ===
+token_validator.rs:47

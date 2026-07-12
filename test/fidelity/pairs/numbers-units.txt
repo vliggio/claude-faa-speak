@@ -1,0 +1,3 @@
+Every number must survive (generic check does the work here).
+=== input ===
+upd timeout cfg: 30s → 45s, retries 3 → 5, backoff base 250ms. redeploy srv after upd applies.

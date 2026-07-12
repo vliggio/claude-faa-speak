@@ -1,0 +1,10 @@
+The documented hazard words: invented truncations prime hardest but expand
+worst (docs/custom-dictionary.md). This pair is the canary — if apfel
+misreads vld/evnt/rdr/endpt, it fails here before it fails a user.
+=== input ===
+vld fails on empty str arr → rdr shows stale evnt data. fix: add vld chk at endpt before rdr runs.
+=== must-contain ===
+valid
+render
+event
+endpoint
