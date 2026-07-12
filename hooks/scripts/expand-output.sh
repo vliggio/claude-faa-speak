@@ -24,7 +24,7 @@ set -euo pipefail
 # stops within a session; stale ones are purged below.)
 FALLBACK_FLAG=""
 APFEL_ERR=""
-# shellcheck disable=SC2329  # invoked from the EXIT trap string below
+# shellcheck disable=SC2329,SC2317  # invoked from the EXIT trap string below (older shellchecks flag the body as unreachable)
 faa_scratch_cleanup() {
   if [ -n "$FALLBACK_FLAG" ]; then rm -f -- "$FALLBACK_FLAG" 2>/dev/null || true; fi
   if [ -n "$APFEL_ERR" ]; then rm -f -- "$APFEL_ERR" 2>/dev/null || true; fi
