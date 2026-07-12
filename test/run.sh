@@ -440,6 +440,8 @@ assert_contains "fidelity harness: skip explains itself" "$FOUT" "SKIP"
 if bash -n "$ROOT/scripts/bench.sh" 2>/dev/null; then ok "bench.sh parses"; else fail "bench.sh parses"; fi
 if bash -n "$ROOT/scripts/mine-dict.sh" 2>/dev/null; then ok "mine-dict.sh parses"; else fail "mine-dict.sh parses"; fi
 if bash -n "$ROOT/scripts/verify-deltas.sh" 2>/dev/null; then ok "verify-deltas.sh parses"; else fail "verify-deltas.sh parses"; fi
+if bash -n "$ROOT/scripts/judge-parity.sh" 2>/dev/null; then ok "judge-parity.sh parses (P1 parity check)"; else fail "judge-parity.sh parses"; fi
+if bash -n "$ROOT/scripts/check-autoclarity.sh" 2>/dev/null; then ok "check-autoclarity.sh parses (P7 auto-clarity check)"; else fail "check-autoclarity.sh parses"; fi
 mkdir -p "$TMP/mine"
 printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"the kubernetes deployment rollout needs a readiness probe and the connection pool exhausts quickly\n```bash\nignore_this_code_token\n```\n"}]}}' > "$TMP/mine/mine-fixture.jsonl"
 MINED=$(TOP=5 MINCOUNT=1 MINLEN=5 bash "$ROOT/scripts/mine-dict.sh" "$TMP/mine" 2>/dev/null)

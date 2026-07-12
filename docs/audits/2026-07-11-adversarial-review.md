@@ -1,13 +1,11 @@
 # faa-speak — Adversarial Review (2026-07-11)
 
-> **Status (2026-07-12): mechanical findings remediated; premise findings open.**
-> Every code defect below (B1–B7) was fixed the next day in two commits —
-> `ca4dd42` (B1–B4) and `0d7848c` (B5–B7) — growing the suite from 72 to 93
-> checks, all verified under bash 5.3 **and** stock macOS bash 3.2 plus
-> shellcheck. The premise findings (P1–P7) are product/methodology questions
-> that code cannot close; they are recorded here with what would resolve each.
-> The report body describes the repo **as of `dc97041` (v0.2.0)**, the state
-> that was reviewed.
+> **Status (2026-07-12): mechanical findings remediated; premise findings now
+> measured.** Every code defect below (B1–B7) was fixed in two commits —
+> `ca4dd42` (B1–B4) and `0d7848c` (B5–B7). The Tier-1 measurement tooling then
+> landed (PR #30), and the Tier-2 experiments were run — **§7 records the
+> numbers, and they are not kind to the premise.** The report body below
+> describes the repo **as of `dc97041` (v0.2.0)**, the state that was reviewed.
 
 > **Scan mode:** single-reviewer adversarial pass (Claude Fable 5), brief:
 > *"assume nothing is right, that the whole premise is incorrect in the first
@@ -236,3 +234,117 @@ one real coding-session measurement (P4).
 
 Suite: 72 → 81 (`ca4dd42`) → 93 (`0d7848c`) checks, all green under bash
 5.3 and /bin/bash 3.2, shellcheck clean.
+
+---
+
+## 7. Tier-2 measurement results (2026-07-12)
+
+The Tier-1 tooling (PR #30) made three of the open premise findings
+measurable without guesswork. All three were run through the logged-in
+`claude` CLI on 2026-07-12 (session default model; ~160 `--print` calls).
+Single sessions are noisy — read these as one data point, not a verdict —
+but the *relative* orderings below are within-session and apples-to-apples,
+so they are robust to the absolute level.
+
+### 7.1 The dictionary vs. a one-line instruction (P1, P2, P3)
+
+`scripts/bench.sh --ab --concise --runs 5` over the 10 bench prompts, with
+the **controlled** table-only arm (`bench/tableless-plugin`), savings vs
+plain:
+
+| Arm | Mean | Range | What it is |
+|---|---|---|---|
+| **concise** | **39%** | 26–49% | plain prompt + one-line "answer concisely"; no plugin, no dialect, no expansion |
+| faa (shipped) | 27% | 16–36% | full skill: telegraphic dialect **+** dictionary |
+| tableless (control) | 15% | 2–21% | the shipped skill with **only** the abbreviation table removed |
+
+FACT. Two findings, both directly on the premise:
+
+1. **A one-sentence "answer concisely" instruction beat the entire faa
+   apparatus, 39% vs 27% — and won all five runs individually** (26/42/41/37/49
+   vs 20/36/30/16/35). It produces *more* savings than the dialect, in
+   readable English, with none of the machinery (no marker, no Stop hook, no
+   apfel, no dictionary-sync). This is the P2 headline: the compress-then-
+   expand design is dominated by a prompt you could paste into any system
+   message.
+2. **The dictionary's own contribution is ~12 points (27% − 15%), measured
+   against a control that differs by the table alone** — the honest,
+   unconfounded version of #10's "~8 points" (whose nodict arm also dropped
+   two examples, P3). The contribution is real but the ranges overlap heavily
+   (faa 16–36 vs tableless 2–21), so it is noisy and swings run to run
+   (the table added just 2 points in run 1, ~14 in run 4).
+
+Caveat: this session measured faa at 27% mean, against the README's
+2026-07-09 figure of ~53%. The gap is plausibly model/session drift and is
+*not* grounds to overwrite the README number from one session — but the
+within-session ordering (concise > faa > tableless) does not depend on the
+absolute level.
+
+### 7.2 Information parity — savings vs. omission (P1)
+
+`scripts/judge-parity.sh`: for each prompt, a judge counts how many of the
+plain answer's distinct technical points survive in the compressed answer.
+
+FACT. **Overall 80 of 110 reference points survived (72%)** at 18% token
+savings on that pass — i.e. roughly a quarter of the plain answer's content
+was *dropped*, not compressed. The damning detail is the correlation:
+**the prompts where faa "saved" the most are the ones where it dropped the
+most.**
+
+| Prompt | token save% | point coverage |
+|---|---|---|
+| kubernetes CrashLoopBackOff | 51% | 64% (dropped exit-code meanings, `CreateContainerConfigError`) |
+| database connection pooling | 54% | 73% (dropped pool-growth, health-check, sizing rule) |
+| bloom filter | 23% | 60% (dropped all three quantitative formulas) |
+| REST vs GraphQL | **−170%** | 87% (compressed answer was ~3× *longer* than plain) |
+| processes vs threads | −2% | 92% |
+
+Compression is not even monotonic (REST/GraphQL and threads cost *more*
+tokens under the skill), and the high-savings cases buy their savings partly
+by leaving technical substance out. (One prompt — the auth-diagnosis — scored
+28% coverage for a degenerate reason: under `--print --plugin-dir` the model
+treated it as a repo task and answered "nothing here matches"; not a
+compression-fidelity signal, excluded from interpretation.)
+
+### 7.3 Auto-clarity compliance (P7)
+
+`scripts/check-autoclarity.sh`: probes designed to trip each documented
+Auto-Clarity exception, judged for whether compression actually disengaged.
+
+FACT. **5/6 behaved as documented.** All four exception categories
+(destructive op, security warning, confused user, ambiguous ordered steps)
+dropped to plain English on their first probe, and the compress-control
+correctly stayed telegraphic — so the feature is real, not fictional. **But
+one of two destructive-op probes (deleting git history) stayed compressed**,
+confirming the review's characterization: Auto-Clarity is probabilistic
+prompt compliance, not a guarantee. For a safety feature that is the
+difference that matters — it will sometimes compress exactly the warning it
+promises to spell out.
+
+### 7.4 What the numbers say about P2
+
+The decision rule the 2026-07-08 audit set (Open Question 5): *drop the
+dictionary if telegraphic style alone reaches ~90% of the savings.* The
+cleaner question this data raises is bigger than the dictionary: **the whole
+compress-then-expand product is out-earned by "answer concisely."** The
+dictionary adds a noisy ~12 points on top of a dialect that itself loses to a
+one-line instruction — and every point of dialect savings is partly paid for
+in dropped content (§7.2) and read back through a paraphrase that never
+enters the model's context (P6). The honest options, in order of increasing
+change:
+
+1. **Reframe (smallest):** stop marketing the dictionary as "earned"; state
+   that a one-line concise instruction beats the whole mode on these prompts,
+   and cite §7. Keep the tool for the niche that genuinely wants byte-level
+   dialect + local re-expansion.
+2. **Slim:** drop the dictionary (the ~12 points are noisy and cost the most
+   expansion-fidelity, since the invented truncations are what apfel misreads),
+   keeping the telegraphic style + expansion. Simpler repo, no sync burden.
+3. **Pivot (largest):** ship the honest product the data points at — a "be
+   concise" skill with no marker, hook, apfel, or dictionary — and retire the
+   expansion machinery. This is what §7.1 says actually maximizes savings while
+   staying readable.
+
+Recommendation: **(1) now** (it is just honesty about measured facts), and
+put **(2)/(3)** to the maintainer as a product decision — they are direction
+changes, not review findings.

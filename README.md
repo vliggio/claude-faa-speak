@@ -28,6 +28,8 @@ You (normal English)
 
 Measured savings: **~53% of output tokens** (10-prompt `scripts/bench.sh --ab` run, 2026-07-09: plain=15851 → faa=7413). The A/B's no-dictionary arm saved 45%, so telegraphic style does most of the work and the abbreviation table adds ~8 points on top (9 of 10 prompts favored it). Run the bench with your own prompts before relying on these numbers for your workload.
 
+> **Read this before trusting the number above.** A follow-up 5-run study (2026-07-12, [docs/audits/2026-07-11-adversarial-review.md](docs/audits/2026-07-11-adversarial-review.md) §7) found two things worth knowing: (1) a plain *"answer concisely"* one-line instruction — no plugin, no dialect, no expansion — **out-saved faa in all five runs** (39% vs 27% mean); and (2) some of faa's savings is content **omission**, not compression (72% of the plain answer's technical points survived, and the highest-savings prompts dropped the most). For agentic coding — where output is mostly tool calls and code, both exempt — the realistic net is a few percent (`scripts/measure-addressable.sh`). Treat this as a readable-compression *experiment*, not a proven token-saving system.
+
 > **No Apple Silicon, or can't build apfel?** The compression half works on any platform — you get the full token savings either way; the hook just quietly skips the local re-expansion.
 >
 > **Scope notes:** expansion runs for the main conversation only (subagent output is not expanded) and only for the **final** response of a turn — text Claude emits between tool calls stays compressed. The on-device expansion is best-effort: if apfel fails or is missing you simply see the compressed text, and long expansions stop at an internal time budget (`FAA_DEADLINE`, default 22s) so a slow model delivers a partial expansion instead of nothing.
@@ -245,7 +247,7 @@ printf 'db conn pool chk' | apfel -s "expand abbreviations"
 **4. Rule out the plugin itself** — both run without a model or login:
 
 ```bash
-bash test/run.sh          # 112 checks; all green means the pipeline is healthy
+bash test/run.sh          # 114 checks; all green means the pipeline is healthy
 claude plugin validate .  # manifest loads
 ```
 
@@ -311,9 +313,11 @@ scripts/measure-addressable.sh ~/.claude/projects/<project-dir>
 | Auto-clarity | Compression auto-disengages for security warnings, irreversible ops, user confusion | Manual level toggle / "normal mode" |
 | Failure honesty | Expansion failures announce themselves with the underlying error | n/a — nothing to fail; output is already final |
 | Prerequisites | Compression: none. Expansion: macOS 26+, Apple Intelligence, [apfel](https://github.com/Arthur-Ficial/apfel) | Node ≥ 18 |
-| Verification | 112-check suite, CI, published self-audit with receipts | Benchmark + eval directories |
+| Verification | 114-check suite, CI, published self-audit with receipts | Benchmark + eval directories |
 
-**Why faa-speak, in one argument:** compressed output is only cheap if someone reads it, and with Caveman that someone is you, all day, every response. faa-speak closes the loop — the API bills you for the compressed tokens, and an on-device model (costing nothing and sending nothing anywhere) hands you readable English. You get the savings without adopting a dialect. The dictionary is also *earned* rather than assumed: every entry survived token-delta measurement, and the whole table survived eight adversarial A/B runs (documented in [docs/custom-dictionary.md](docs/custom-dictionary.md) — including the finding that compression tables work by style-priming, not glyph-swapping, which anyone building in this category will want to read).
+**Why faa-speak, in one argument:** compressed output is only cheap if someone reads it, and with Caveman that someone is you, all day, every response. faa-speak closes the loop — the API bills you for the compressed tokens, and an on-device model (costing nothing and sending nothing anywhere) hands you readable English. You get the savings without adopting a dialect. The dictionary is measurement-gated: every entry survived token-delta measurement, and the whole table survived eight adversarial A/B runs (documented in [docs/custom-dictionary.md](docs/custom-dictionary.md) — including the finding that compression tables work by style-priming, not glyph-swapping, which anyone building in this category will want to read).
+
+> **In fairness:** a later controlled study ([docs/audits/2026-07-11-adversarial-review.md](docs/audits/2026-07-11-adversarial-review.md) §7) found a plain "answer concisely" instruction out-saves the whole mode on the bench prompts, and isolated the dictionary's own contribution at a noisy ~12 points over a table-only control. If your goal is purely fewer output tokens in readable English, that one-line instruction is the honest baseline to beat; faa-speak earns its keep only if you specifically want the FAA dialect with free local re-expansion.
 
 **When Caveman is the better choice, honestly:** you work across many agents (faa-speak is Claude Code only), you're not on an Apple Intelligence Mac (you'd get faa-speak's compression but read it raw — at which point the two products converge), you want input-token savings via memory-file compression (faa-speak doesn't touch input), or you simply enjoy reading grug. Both are MIT; nothing stops you benchmarking one against the other with `scripts/bench.sh` — we'd genuinely like to see the numbers.
 
