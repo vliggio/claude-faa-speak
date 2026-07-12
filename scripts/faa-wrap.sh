@@ -36,11 +36,14 @@ fi
 # auto-trigger in --print mode.
 COMPRESSED=$(claude --print --plugin-dir "$PLUGIN_ROOT" "/faa-speak $*")
 
-if [[ "$COMPRESSED" == *'<!-- faa -->'* ]]; then
+# Same contract as the Stop hook (shared faa_gate): only a marker at the END
+# of the reply triggers expansion — a reply that merely quotes the marker
+# mid-text passes through verbatim, marker intact. On success TEXT holds the
+# reply with the trailing marker stripped.
+if faa_gate "$COMPRESSED"; then
   if [ "${FAA_SHOW_COMPRESSED:-0}" = "1" ]; then
     printf '%s\n\n' "$COMPRESSED"
   fi
-  TEXT=${COMPRESSED//'<!-- faa -->'/}
   if [ "${FAA_SHOW_SAVINGS:-0}" = "1" ]; then
     # capture (rather than stream) so the full expansion is available for the
     # savings comparison; FAA_STREAM still gives progressive output on stderr

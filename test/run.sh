@@ -30,6 +30,16 @@ MARK_STUB="$TMP/apfel-mark"
 printf '#!/usr/bin/env bash\nprintf "\xc2\xabE\xc2\xbb"; cat\n' > "$MARK_STUB"; chmod +x "$MARK_STUB"
 FAIL_STUB="$TMP/apfel-fail"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$FAIL_STUB"; chmod +x "$FAIL_STUB"
+COUNT_STUB="$TMP/apfel-count"   # replaces each chunk with «its word count»
+cat > "$COUNT_STUB" <<'EOF'
+#!/usr/bin/env bash
+c=$(cat)
+printf '\xc2\xab%s\xc2\xbb' "$(printf '%s' "$c" | wc -w | tr -d '[:space:]')"
+EOF
+chmod +x "$COUNT_STUB"
+chunk_sizes() { # expansion output -> space-separated word counts of the chunks apfel received
+  grep -o '«[0-9]*»' | tr -d '«»' | tr '\n' ' ' | sed 's/ $//'
+}
 
 run_hook() { # transcript-path [apfel] -> sets HOOK_OUT and HOOK_RC (no subshell at call site)
   local apfel="${2:-$STUB}" sdir
@@ -51,6 +61,22 @@ assert_eq "splitter tags prose/code/prose" "$recs" "PCP"
 recs=$(printf 'list item:\n  ```js\n  indented code\n  ```\ndone\n' | faa_split_segments | record_types)
 case "$recs" in *C*) ok "splitter recognizes indented fences" ;; *) fail "splitter recognizes indented fences (tags: $recs)" ;; esac
 
+# CommonMark fence tracking: a ``` example inside a ````-fenced block is
+# code, not prose — and an info-string line (```js) never closes a block.
+NEST=$'prose stays before this\n````markdown\nouter doc\n```js\ninner code\n```\nmore outer\n````\nprose stays after this'
+recs=$(printf '%s\n' "$NEST" | faa_split_segments | record_types)
+assert_eq "splitter keeps 3-backtick fence nested in 4-backtick block as code (B3 regression)" "$recs" "PCP"
+OUT=$(APFEL="$MARK_STUB" faa_expand_text "$NEST")
+assert_contains "nested-fence block passes through byte-identical (B3 regression)" "$OUT" \
+  $'````markdown\nouter doc\n```js\ninner code\n```\nmore outer\n````'
+
+PURITY=$'prose stays before this\n```\ncontent line\n```js\nstill inside block\n```\nprose stays after this'
+recs=$(printf '%s\n' "$PURITY" | faa_split_segments | record_types)
+assert_eq "splitter: info-string line (\`\`\`js) does not close an open block" "$recs" "PCP"
+OUT=$(APFEL="$MARK_STUB" faa_expand_text "$PURITY")
+assert_contains "closing-fence purity: inner \`\`\`js content stays code" "$OUT" \
+  $'```\ncontent line\n```js\nstill inside block\n```'
+
 echo "=== lib: expansion pipeline (stub = cat) ==="
 export APFEL="$STUB"
 IN=$'DX: issue | cause | fix\nsecond prose line with several more words here\nsee `cfg/db_pool.toml` and rerun `make db-init` after\n\n```bash\ncode line one\ncode line two\n```\ntrailing prose after code block here'
@@ -66,12 +92,26 @@ assert_eq "code block byte-identical" "$CODE_ACTUAL" "$CODE_EXPECT"
 OUT=$(APFEL="$MARK_STUB" faa_expand_text "tiny msg")
 assert_eq "<=3-word prose skips apfel" "$OUT" "tiny msg"
 
+# The hard cap must bound every chunk even when a whole paragraph arrives as
+# ONE line (markdown paragraphs usually do) — and the trailing newline must
+# never become a whitespace-only apfel call (hallucination-splice hazard).
 LONG=""
 i=0
 while [ $i -lt 520 ]; do LONG="${LONG}word$i "; i=$((i + 1)); done
-OUT=$(APFEL="$MARK_STUB" faa_expand_text "$LONG")
-MARKS=$(printf '%s' "$OUT" | grep -o "«E»" | grep -c . )
-if [ "$MARKS" -ge 2 ]; then ok "blank-line-free 520-word wall is hard-flushed into chunks ($MARKS)"; else fail "hard flush (chunks: $MARKS)"; fi
+SIZES=$(APFEL="$COUNT_STUB" faa_expand_text "$LONG" | chunk_sizes)
+assert_eq "single-line 520-word wall: capped chunks, no empty chunk (B1/B2 regression)" "$SIZES" "450 70"
+
+LONG=""
+i=0
+while [ $i -lt 2000 ]; do LONG="${LONG}word$i "; i=$((i + 1)); done
+SIZES=$(APFEL="$COUNT_STUB" faa_expand_text "$LONG" | chunk_sizes)
+assert_eq "single-line 2000-word wall: every chunk <=450 words (B1 regression)" "$SIZES" "450 450 450 450 200"
+
+LONG2=""
+i=0
+while [ $i -lt 520 ]; do LONG2="${LONG2}word$i "; i=$((i + 1)); [ $((i % 10)) -eq 0 ] && LONG2="${LONG2}"$'\n'; done
+SIZES=$(APFEL="$COUNT_STUB" faa_expand_text "$LONG2" | chunk_sizes)
+assert_eq "multi-line 520-word wall: line-accumulated chunks stay capped" "$SIZES" "450 70"
 
 OUT=$(APFEL="$FAIL_STUB" faa_expand_text "apfel died mid run but text must survive fully")
 assert_contains "apfel failure falls back to original text" "$OUT" "apfel died mid run but text must survive fully"
@@ -194,6 +234,19 @@ assert_eq "wrapper: code block byte-identical (H3 regression)" "$CODE_ACTUAL" $'
 
 ERR=$(PATH="$TMP:$PATH" APFEL="$STUB" FAA_SHOW_SAVINGS=1 bash "$ROOT/scripts/faa-wrap.sh" "test question" 2>&1 >/dev/null)
 assert_contains "wrapper: FAA_SHOW_SAVINGS=1 reports savings on stderr" "$ERR" "faa-speak savings:"
+
+# Same marker contract as the hook (M3): a reply that merely QUOTES the
+# marker mid-text is not expanded, and the quoted marker is not deleted.
+mkdir -p "$TMP/shim-midmarker"
+cat > "$TMP/shim-midmarker/claude" <<'EOF'
+#!/usr/bin/env bash
+printf 'The plugin appends a marker that looks like <!-- faa --> to responses.\nThis reply merely quotes it mid-text and has no trailing marker.\n'
+EOF
+chmod +x "$TMP/shim-midmarker/claude"
+OUT=$(PATH="$TMP/shim-midmarker:$PATH" APFEL="$MARK_STUB" bash "$ROOT/scripts/faa-wrap.sh" "test question" 2>/dev/null); RC=$?
+assert_eq "wrapper: mid-text marker exit 0" "$RC" "0"
+case "$OUT" in *"«E»"*) fail "wrapper: quoting the marker mid-text does not trigger expansion (B4 regression)" ;; *) ok "wrapper: quoting the marker mid-text does not trigger expansion (B4 regression)" ;; esac
+assert_contains "wrapper: quoted marker survives verbatim (B4 regression)" "$OUT" 'looks like <!-- faa --> to responses'
 
 echo "=== manifest ==="
 if jq -e '.author | type == "object"' "$ROOT/.claude-plugin/plugin.json" >/dev/null 2>&1; then

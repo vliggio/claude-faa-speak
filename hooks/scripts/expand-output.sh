@@ -50,17 +50,8 @@ if [ "$FAA_DEBUG" = "1" ]; then
 fi
 SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 
-# Marker gate: accept only text that ENDS with the marker; strips it and
-# surrounding whitespace into TEXT. Returns 1 when the gate fails.
-faa_gate() {
-  local t="$1"
-  while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
-  if [[ "$t" != *'<!-- faa -->' ]]; then return 1; fi
-  t=${t%'<!-- faa -->'}
-  while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
-  if [ -z "$t" ]; then return 1; fi
-  TEXT="$t"
-}
+# Marker gate: faa_gate (lib/expansion.sh) — accepts only text that ENDS
+# with the marker, strips it and surrounding whitespace into TEXT.
 
 # Dedupe state: never expand the same text twice in one session (the
 # transcript fallback can only see the PREVIOUS turn, so without this it

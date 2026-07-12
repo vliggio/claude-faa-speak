@@ -38,20 +38,47 @@ faa_locate_apfel() {
   return 1
 }
 
+# Marker gate — the single definition of the expansion contract: accept only
+# text that ENDS with the <!-- faa --> marker (a marker quoted mid-text never
+# triggers); strips it and surrounding whitespace into TEXT. Returns 1 when
+# the gate fails. Used by the Stop hook and the wrapper so both entry points
+# enforce the same rule.
+faa_gate() {
+  local t="$1"
+  while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
+  if [[ "$t" != *'<!-- faa -->' ]]; then return 1; fi
+  t=${t%'<!-- faa -->'}
+  while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
+  if [ -z "$t" ]; then return 1; fi
+  # shellcheck disable=SC2034  # TEXT is the out-param read by the sourcing scripts
+  TEXT="$t"
+}
+
 # Split stdin into \x1e-separated records, each prefixed with a one-char type:
 # "C" = fenced code block (passed through verbatim), "P" = prose.
-# Fences may be indented (list-nested code blocks).
+# Fences may be indented (list-nested code blocks). Fence length is tracked
+# per CommonMark: a block opened with N backticks closes only on a fence of
+# >= N backticks with nothing after it — so a ```-fenced example inside a
+# ````-fenced block stays code, and an info-string line (```js) never closes
+# an open block.
 faa_split_segments() {
   awk '
-    BEGIN { in_code = 0; buf = "" }
+    BEGIN { in_code = 0; buf = ""; fence = 0 }
     /^[ \t]*```/ {
+      line = $0
+      sub(/^[ \t]*/, "", line)
+      len = 0
+      while (substr(line, len + 1, 1) == "`") len++
+      rest = substr(line, len + 1)
       if (!in_code) {
         if (buf != "") printf "P%s\036", buf
-        buf = $0 "\n"; in_code = 1
-      } else {
+        buf = $0 "\n"; in_code = 1; fence = len
+      } else if (len >= fence && rest ~ /^[ \t]*$/) {
         buf = buf $0 "\n"
         printf "C%s\036", buf
         buf = ""; in_code = 0
+      } else {
+        buf = buf $0 "\n"
       }
       next
     }
@@ -81,9 +108,13 @@ _faa_apfel_chunk() {
 }
 
 # Expand a prose segment. Chunks long segments at blank lines once past 300
-# words, with a hard flush at 450 words so a blank-line-free wall of text can
-# never exceed apfel's 4096-token context. Segments of <=3 words pass through
-# unchanged (not worth an inference).
+# words, with a hard cap of 450 words per chunk so no chunk can exceed
+# apfel's 4096-token context — the cap holds even when a whole paragraph
+# arrives as one line (markdown paragraphs usually do): such a line is
+# sliced at word boundaries. Segments of <=3 words pass through unchanged
+# (not worth an inference); whitespace-only buffers are emitted verbatim,
+# never sent to apfel (a small model handed blank input can answer the
+# expansion prompt itself, splicing hallucinated text into the output).
 faa_expand_prose() {
   local chunk="$1" wc
   wc=$(printf '%s' "$chunk" | wc -w | tr -d '[:space:]')
@@ -95,25 +126,57 @@ faa_expand_prose() {
     _faa_apfel_chunk "$chunk"
     return 0
   fi
-  local buf="" cnt=0 line n
+  # Blank/whitespace tests below use glob MATCHES (*[![:space:]]*), never
+  # ${var//[[:space:]]/} substitution — bash 3.2's pattern substitution is
+  # quadratic-or-worse on long strings (a 22KB paragraph takes minutes).
+  local buf="" cnt=0 line n i
   while IFS= read -r line; do
     n=0
-    if [ -n "${line//[[:space:]]/}" ]; then
-      # pure-bash word count: no subprocess per line
-      local -a words
+    # pure-bash word count: no subprocess per line
+    local -a words
+    words=()
+    if [[ "$line" == *[![:space:]]* ]]; then
       IFS=$' \t' read -r -a words <<< "$line"
       n=${#words[@]}
     fi
+    if [ "$n" -gt 450 ]; then
+      # single line past the hard cap: flush pending text, then slice the
+      # line itself into 450-word chunks (intra-line whitespace normalizes
+      # to single spaces; it is prose bound for rewriting anyway)
+      if [[ "$buf" == *[![:space:]]* ]]; then
+        _faa_apfel_chunk "$buf"
+        printf '\n'
+      else
+        printf '%s' "$buf"
+      fi
+      buf=""; cnt=0
+      i=0
+      while [ $((n - i)) -gt 450 ]; do
+        _faa_apfel_chunk "${words[*]:i:450}"
+        printf '\n'
+        i=$((i + 450))
+      done
+      buf="${words[*]:i}"$'\n'
+      cnt=$((n - i))
+      continue
+    fi
+    if [ "$cnt" -gt 0 ] && [ $((cnt + n)) -gt 450 ]; then
+      _faa_apfel_chunk "$buf"
+      printf '\n'
+      buf=""; cnt=0
+    fi
     buf="$buf$line"$'\n'
     cnt=$((cnt + n))
-    if { [ -z "${line//[[:space:]]/}" ] && [ "$cnt" -ge 300 ]; } || [ "$cnt" -ge 450 ]; then
+    if [[ "$line" != *[![:space:]]* ]] && [ "$cnt" -ge 300 ]; then
       _faa_apfel_chunk "$buf"
       printf '\n'
       buf=""; cnt=0
     fi
   done <<< "$chunk"
-  if [ -n "$buf" ]; then
+  if [[ "$buf" == *[![:space:]]* ]]; then
     _faa_apfel_chunk "$buf"
+  else
+    printf '%s' "$buf"
   fi
 }
 
