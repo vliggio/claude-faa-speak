@@ -1,0 +1,8 @@
+The negation class: deterministic checks are weak here (a paraphrase can
+invert meaning while keeping every keyword) — this pair guards the easy
+cases; the judge tier covers the rest.
+=== input ===
+cache cmp not thread-safe. do not share conn obj across threads. use one conn per worker instead.
+=== must-contain ===
+not
+thread

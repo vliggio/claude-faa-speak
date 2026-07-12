@@ -1,0 +1,6 @@
+File paths and commands must survive byte-identical.
+=== input ===
+EX: cfg loader reads `cfg/db_pool.toml` → builds pool at boot | pool size must match env limits | edit file, run `make db-init`, restart srv
+=== must-contain ===
+cfg/db_pool.toml
+make db-init

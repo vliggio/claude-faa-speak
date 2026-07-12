@@ -96,8 +96,21 @@ faa_split_segments() {
 # caller: when FAA_FALLBACK_FLAG names a file, each failed chunk appends to
 # it, and apfel's stderr is preserved in FAA_APFEL_ERR (if set) so the caller
 # can tell the user WHY (e.g. "Apple Intelligence not enabled").
+#
+# Deadline: when FAA_DEADLINE is set (seconds since shell start), chunks
+# whose turn comes after the deadline pass through compressed instead of
+# invoking apfel — so a caller running under an external timeout (the Stop
+# hook is killed at 30s) can always deliver a partial expansion rather than
+# losing everything to the kill. FAA_DEADLINE_FLAG records that it happened.
 _faa_apfel_chunk() {
   local chunk="$1" out
+  if [ -n "${FAA_DEADLINE:-}" ] && [ "$SECONDS" -ge "$FAA_DEADLINE" ]; then
+    if [ -n "${FAA_DEADLINE_FLAG:-}" ]; then
+      printf '1' >> "$FAA_DEADLINE_FLAG" 2>/dev/null || true
+    fi
+    printf '%s' "$chunk"
+    return 0
+  fi
   out=$(printf '%s' "$chunk" | "$FAA_APFEL" -s "$EXPANSION_PROMPT" 2>>"${FAA_APFEL_ERR:-/dev/null}") || out=""
   if [ -n "$out" ]; then
     printf '%s' "$out"

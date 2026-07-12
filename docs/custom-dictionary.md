@@ -11,6 +11,18 @@ extension is chasing a slice of what's left, so every entry must pay its way —
 each one also grows apfel's expansion prompt (eating into its 4096-token
 window) and adds an ambiguity the small on-device expander can get wrong.
 
+**Measurement caveat (2026-07-11 adversarial review):** the #10 nodict arm
+removed the table *and* two of the three dialect examples, so the "~8 points"
+attributes to the table what may belong to the examples — and register priming
+(§field notes below) is exactly the mechanism examples drive. For table-only
+questions use the controlled arm, which `test/run.sh` drift-tests against the
+shipped skill so it can never diverge by more than the table:
+
+```bash
+VARIANT_ROOT="$PWD/bench/tableless-plugin" VARIANT_SKILL=faa-speak-tableless \
+  scripts/bench.sh --ab --runs 5
+```
+
 ## 1. Mine a corpus
 
 The dictionary compresses Claude's **responses**, so mine assistant output,

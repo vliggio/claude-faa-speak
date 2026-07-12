@@ -1,0 +1,6 @@
+Structural prefix expansion: the tradeoff terms must survive.
+=== input ===
+ARCH: db conn pooling | higher baseline mem vs reduced latency under load | rec for high-load srv, skip for low-traffic
+=== must-contain ===
+latency
+pooling

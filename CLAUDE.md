@@ -33,6 +33,7 @@ SKILL.md controls Claude's output format
 - **apfel has a 4096-token context window** (input + output). Prose is chunked at blank lines past 300 words with a hard cap of 450 words per chunk; a single line past the cap (markdown paragraphs usually arrive as one line) is sliced at word boundaries, so no chunk can ever exceed the window. Whitespace-only buffers are never sent to apfel.
 - **Code blocks are never expanded.** The splitter passes fenced blocks (backtick or tilde, including indented fences and nested fences per CommonMark fence-length/char rules) through byte-identical — `test/run.sh` asserts this. Indented (4-space, unfenced) code blocks are *not* recognized; SKILL.md instructs fenced output.
 - **`systemMessage` is capped at 10k chars** — the hook truncates beyond ~9.5k (the full expansion always streamed to stderr).
+- **The hook budgets its own time.** `FAA_DEADLINE` (default 22s, always < the 30s hook timeout) makes chunks whose turn comes late pass through compressed with a ⚠ notice — a slow expansion delivers a partial result instead of being killed with nothing visible. The expansion the user reads is a paraphrase that never enters Claude's context (documented in README Safety).
 - **Auto-clarity exceptions**: SKILL.md drops compression for security warnings, irreversible operations, ambiguous multi-step sequences, and user confusion.
 - **The dictionary lives in exactly one place:** `lib/expansion.sh` (`FAA_DICT`). The tables in `SKILL.md` and `README.md` are human-facing copies; `test/run.sh` fails if either drifts. To add an abbreviation: edit `FAA_DICT`, then both tables. New entries must be measured first — the process (mine → token-delta → A/B) is in `docs/custom-dictionary.md`.
 
@@ -50,7 +51,14 @@ claude --print --plugin-dir . "/faa-speak explain database connection pooling"
 
 # Token-savings measurement (README carries the latest measured number):
 ./scripts/bench.sh
-./scripts/bench.sh --ab   # + no-dictionary arm (bench/nodict-plugin) — issue #10 dictionary A/B
+./scripts/bench.sh --ab --runs 5   # + no-dictionary arm (bench/nodict-plugin), 5 repeats with spread
+# table-only isolation (bench/tableless-plugin is drift-tested against the shipped skill):
+VARIANT_ROOT="$PWD/bench/tableless-plugin" VARIANT_SKILL=faa-speak-tableless ./scripts/bench.sh --ab
+./scripts/bench.sh --concise       # + "be concise" readable-baseline arm
+./scripts/measure-addressable.sh   # what share of REAL output tokens is compressible prose
+
+# Expansion-fidelity gate (requires Apple Intelligence; skips cleanly without):
+bash test/fidelity/run.sh          # run before shipping dictionary/prompt changes
 ```
 
 ## Prerequisites

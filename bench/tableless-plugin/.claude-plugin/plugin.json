@@ -1,0 +1,9 @@
+{
+  "name": "faa-speak-tableless",
+  "version": "0.2.0",
+  "description": "Benchmark-only controlled variant: the shipped faa-speak skill with ONLY the abbreviation table removed — isolates the table's contribution",
+  "author": {
+    "name": "vliggio"
+  },
+  "license": "MIT"
+}
