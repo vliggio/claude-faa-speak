@@ -18,6 +18,11 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PLUGIN_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+# Which skill to grade: defaults to the shipped FAA dialect; override to test a
+# variant (e.g. the v2 lean prototype):
+#   VARIANT_ROOT="$PWD/bench/lean-plugin" VARIANT_SKILL=faa-speak-lean scripts/judge-parity.sh
+CAND_ROOT="${VARIANT_ROOT:-$PLUGIN_ROOT}"
+CAND_SKILL="${VARIANT_SKILL:-faa-speak}"
 OUT_DIR="${OUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/faa-parity.XXXXXX")}"
 mkdir -p "$OUT_DIR"
 
@@ -54,7 +59,7 @@ printf '%-52s %7s %7s %6s %10s\n' "prompt" "plain" "faa" "save%" "coverage"
 for p in "${PROMPTS[@]}"; do
   i=$((i + 1))
   pj=$(ask "$p")
-  fj=$(ask --plugin-dir "$PLUGIN_ROOT" "/faa-speak $p")
+  fj=$(ask --plugin-dir "$CAND_ROOT" "/$CAND_SKILL $p")
   printf '%s' "$pj" > "$OUT_DIR/$i-plain.json"
   printf '%s' "$fj" > "$OUT_DIR/$i-faa.json"
   pa=$(printf '%s' "$pj" | jq -r '.result // ""')
@@ -69,7 +74,7 @@ QUESTION: $p
 ANSWER A (reference):
 $pa
 
-ANSWER B (candidate — written in a telegraphic abbreviated dialect; decode it before judging):
+ANSWER B (candidate — may be terse prose, a telegraphic abbreviated dialect, or compact PREFIX: field | field | field lines; decode/expand it before judging):
 $fa
 
 List the distinct technical points ANSWER A makes, then decide for each whether its substance is present in ANSWER B in any wording. Reply with ONLY a compact single-line JSON object, no code fences, shaped exactly like:

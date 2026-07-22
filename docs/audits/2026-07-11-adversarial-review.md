@@ -348,3 +348,67 @@ change:
 Recommendation: **(1) now** (it is just honesty about measured facts), and
 put **(2)/(3)** to the maintainer as a product decision — they are direction
 changes, not review findings.
+
+---
+
+## 8. faa-speak v2 prototype — measured (2026-07-22)
+
+§7 concluded the abbreviation dialect optimizes the smallest, only-lossy slice.
+A v2 prototype (`bench/lean-plugin`, `feat(v2-prototype)`) tested the reanalysis
+directly: a **lean behavioral skill** (concise; diffs-not-rewrites; read-once;
+plan-first; minimize round-trips; think-briefly; fabrication guard) plus an
+**optional structured-field format** rendered by a deterministic, model-free
+template (`faa_render_fields`/`faa_render_text` — no apfel, any platform). Two
+separable ideas, measured separately.
+
+### 8.1 Prose Q&A — `bench.sh --ab --concise --runs 5` (savings vs plain)
+
+| Arm | Mean | Range |
+|---|---|---|
+| **concise** (one-line instruction, no plugin) | **37%** | 31–49% |
+| faa (shipped dialect) | 17% | −1 to 28% |
+| **faa-speak-lean** (structured fields) | **8%** | −7 to 23% |
+
+FACT. On prose the lean structured-field format is the **weakest** arm — worse
+than the old dialect, high variance, sometimes negative. Cramming an answer into
+three fixed fields does not save tokens; a plain concise instruction wins
+decisively and with the tightest spread.
+
+### 8.2 Parity of the lean variant — `judge-parity.sh` (variant-aware)
+
+FACT. **75 of 115 reference points survived (65%) at −3% tokens** — *worse*
+coverage than the shipped dialect (72%) and negative savings. The
+deterministic render is lossless, but the model's generation-time choice to
+compress into 3 fields is itself lossy, and on 5 of 10 prompts the field format
+cost *more* tokens than plain. The structured-field mode fails its own pitch.
+
+### 8.3 Agentic edit tasks — `bench-agentic.sh -n 2` (plain vs lean)
+
+FACT. Output tokens **plain 2933 → lean 2559 (12% fewer)**, consistent across
+all 6 cells (lean ≤ plain every time). Turns: **18 vs 18** — no round-trip
+reduction on these small single-file edits (they are inherently ~3 turns; there
+was no wasted loop to cut, and the diff-vs-rewrite gap is small on tiny files).
+The ~12% is terser prose + edit discipline, not fewer/smaller tool calls at this
+size — the round-trip lever needs larger, multi-file tasks to show.
+
+### 8.4 Verdict against the decision rule
+
+The rule (§ plan): adopt v2 in place only if lean beats plain-concise *and*
+old-faa beyond noise while holding ~100% parity.
+
+- **Structured-field + deterministic render: REJECT.** 8% vs concise's 37% on
+  prose, 65% parity (below faa's 72%), negative savings on half the prompts.
+  Elegant idea, but the generation-side field-cramming is lossy and non-saving —
+  it does not earn its place. (This retires the last salvageable piece of the
+  compress-then-render premise.)
+- **Lean *behavioral* rules: the real, keepable value** — a consistent ~12% on
+  edit tasks and the 37% concise number on prose. But stripped of the fields,
+  that skill is essentially "be concise + prefer edits + verify first" — i.e.
+  claude-token-efficient's design, which the data vindicates. It is not a
+  *dialect/render* product; it is a rules file.
+
+**Net:** the prototype confirms §7 from the build side. No in-place adoption of
+the render machinery. The behavioral ruleset is worth shipping as a plain lean
+skill (no fields, no render, no apfel, no dictionary) — a maintainer product
+call, tracked in issue #32. `bench/lean-plugin` stays as a measured lab variant
+(like `nodict`/`tableless`/`measured`) for reproduction.
