@@ -247,7 +247,7 @@ printf 'db conn pool chk' | apfel -s "expand abbreviations"
 **4. Rule out the plugin itself** — both run without a model or login:
 
 ```bash
-bash test/run.sh          # 114 checks; all green means the pipeline is healthy
+bash test/run.sh          # 132 checks; all green means the pipeline is healthy
 claude plugin validate .  # manifest loads
 ```
 
@@ -313,7 +313,7 @@ scripts/measure-addressable.sh ~/.claude/projects/<project-dir>
 | Auto-clarity | Compression auto-disengages for security warnings, irreversible ops, user confusion | Manual level toggle / "normal mode" |
 | Failure honesty | Expansion failures announce themselves with the underlying error | n/a — nothing to fail; output is already final |
 | Prerequisites | Compression: none. Expansion: macOS 26+, Apple Intelligence, [apfel](https://github.com/Arthur-Ficial/apfel) | Node ≥ 18 |
-| Verification | 114-check suite, CI, published self-audit with receipts | Benchmark + eval directories |
+| Verification | 132-check suite, CI, published self-audit with receipts | Benchmark + eval directories |
 
 **Why faa-speak, in one argument:** compressed output is only cheap if someone reads it, and with Caveman that someone is you, all day, every response. faa-speak closes the loop — the API bills you for the compressed tokens, and an on-device model (costing nothing and sending nothing anywhere) hands you readable English. You get the savings without adopting a dialect. The dictionary is measurement-gated: every entry survived token-delta measurement, and the whole table survived eight adversarial A/B runs (documented in [docs/custom-dictionary.md](docs/custom-dictionary.md) — including the finding that compression tables work by style-priming, not glyph-swapping, which anyone building in this category will want to read).
 

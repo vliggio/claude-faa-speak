@@ -409,6 +409,62 @@ else
   diff <(tableless_expected) <(strip_fm "$TLSKILL") | head -8
 fi
 
+echo "=== v2 prototype: lean variant + deterministic field renderer ==="
+LEAN="$ROOT/bench/lean-plugin"
+if jq -e '(.author | type) == "object" and .name == "faa-speak-lean"' "$LEAN/.claude-plugin/plugin.json" >/dev/null 2>&1; then
+  ok "lean variant manifest structurally valid"
+else
+  fail "lean variant manifest structurally valid"
+fi
+LEANSKILL="$LEAN/skills/faa-speak-lean/SKILL.md"
+if [ -f "$LEANSKILL" ]; then ok "lean variant skill exists"; else fail "lean variant skill exists"; fi
+if grep -qF '<!-- faa2 -->' "$LEANSKILL" 2>/dev/null; then ok "lean variant uses the v2 render marker (<!-- faa2 -->)"; else fail "lean variant uses the v2 render marker"; fi
+# It must NOT emit the shipped apfel marker, or the shipped Stop hook would try
+# to apfel-expand it — the whole point is isolation from the shipped path.
+if grep -qF '<!-- faa -->' "$LEANSKILL" 2>/dev/null && ! grep -qF '<!-- faa2 -->' "$LEANSKILL" 2>/dev/null; then
+  fail "lean variant must not collide with the shipped <!-- faa --> marker"
+else
+  ok "lean variant does not collide with the shipped apfel marker"
+fi
+
+# Deterministic renderer — model-free, so these are exact-output golden tests.
+assert_eq "render DX: three fields → labeled prose" \
+  "$(printf 'DX: a | b | c\n' | faa_render_fields)" "Diagnosis: a. Cause: b. Fix: c."
+assert_eq "render EX: three fields → labeled prose" \
+  "$(printf 'EX: x | y | z\n' | faa_render_fields)" "What: x. Why: y. How: z."
+assert_eq "render ARCH: three fields → labeled prose" \
+  "$(printf 'ARCH: p | t | r\n' | faa_render_fields)" "Pattern: p. Tradeoff: t. Recommendation: r."
+assert_eq "render tolerates 2 fields (no empty trailing label)" \
+  "$(printf 'ARCH: p | t\n' | faa_render_fields)" "Pattern: p. Tradeoff: t."
+assert_eq "render preserves comparators verbatim (< and <=)" \
+  "$(printf 'DX: rejects valid tokens | uses < not <= | change to <=\n' | faa_render_fields)" \
+  "Diagnosis: rejects valid tokens. Cause: uses < not <=. Fix: change to <=."
+assert_eq "render preserves numbers/paths verbatim" \
+  "$(printf 'DX: s | c | change token_validator.rs:47\n' | faa_render_fields)" \
+  "Diagnosis: s. Cause: c. Fix: change token_validator.rs:47."
+assert_contains "render preserves inline code spans" \
+  "$(printf 'EX: filter users | clean list | filter where `active=true`\n' | faa_render_fields)" \
+  'filter where `active=true`'
+assert_eq "render passes non-prefixed prose through unchanged" \
+  "$(printf 'just a plain sentence here\n' | faa_render_fields)" "just a plain sentence here"
+# code protection: a DX: line INSIDE a fenced block must not be rendered
+RENDER_IN=$'DX: real | field | here\n```sql\nDROP TABLE users; -- DX: decoy | not | rendered\n```'
+ROUT=$(faa_render_text "$RENDER_IN")
+assert_contains "render_text hydrates a real prefix line" "$ROUT" "Diagnosis: real. Cause: field. Fix: here."
+assert_contains "render_text leaves DX: inside a code block byte-identical" "$ROUT" "DROP TABLE users; -- DX: decoy | not | rendered"
+
+# The v2 marker rides the shared faa_gate (second arg), same end-of-text contract.
+if faa_gate "$(printf 'DX: a | b | c\n\n<!-- faa2 -->')" "<!-- faa2 -->" && [ "$TEXT" = "DX: a | b | c" ]; then
+  ok "faa_gate accepts the v2 marker at end of text and strips it"
+else
+  fail "faa_gate accepts the v2 marker at end of text and strips it"
+fi
+if faa_gate "$(printf 'quotes <!-- faa2 --> mid-text then more\n')" "<!-- faa2 -->"; then
+  fail "faa_gate rejects a v2 marker quoted mid-text"
+else
+  ok "faa_gate rejects a v2 marker quoted mid-text"
+fi
+
 echo "=== tier-1 tooling: bench flags, addressable measure, fidelity harness ==="
 mkdir -p "$TMP/shim-bench"
 cat > "$TMP/shim-bench/claude" <<'EOF'
@@ -442,6 +498,8 @@ if bash -n "$ROOT/scripts/mine-dict.sh" 2>/dev/null; then ok "mine-dict.sh parse
 if bash -n "$ROOT/scripts/verify-deltas.sh" 2>/dev/null; then ok "verify-deltas.sh parses"; else fail "verify-deltas.sh parses"; fi
 if bash -n "$ROOT/scripts/judge-parity.sh" 2>/dev/null; then ok "judge-parity.sh parses (P1 parity check)"; else fail "judge-parity.sh parses"; fi
 if bash -n "$ROOT/scripts/check-autoclarity.sh" 2>/dev/null; then ok "check-autoclarity.sh parses (P7 auto-clarity check)"; else fail "check-autoclarity.sh parses"; fi
+if bash -n "$ROOT/scripts/lean-wrap.sh" 2>/dev/null; then ok "lean-wrap.sh parses (v2 harness)"; else fail "lean-wrap.sh parses"; fi
+if bash -n "$ROOT/scripts/bench-agentic.sh" 2>/dev/null; then ok "bench-agentic.sh parses (tool/turn lever measure)"; else fail "bench-agentic.sh parses"; fi
 mkdir -p "$TMP/mine"
 printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"the kubernetes deployment rollout needs a readiness probe and the connection pool exhausts quickly\n```bash\nignore_this_code_token\n```\n"}]}}' > "$TMP/mine/mine-fixture.jsonl"
 MINED=$(TOP=5 MINCOUNT=1 MINLEN=5 bash "$ROOT/scripts/mine-dict.sh" "$TMP/mine" 2>/dev/null)

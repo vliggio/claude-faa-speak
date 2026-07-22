@@ -44,10 +44,10 @@ faa_locate_apfel() {
 # the gate fails. Used by the Stop hook and the wrapper so both entry points
 # enforce the same rule.
 faa_gate() {
-  local t="$1"
+  local t="$1" marker="${2:-<!-- faa -->}"
   while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
-  if [[ "$t" != *'<!-- faa -->' ]]; then return 1; fi
-  t=${t%'<!-- faa -->'}
+  if [[ "$t" != *"$marker" ]]; then return 1; fi
+  t=${t%"$marker"}
   while [ -n "$t" ] && [[ "$t" == *[$' \t\r\n'] ]]; do t=${t%?}; done
   if [ -z "$t" ]; then return 1; fi
   # shellcheck disable=SC2034  # TEXT is the out-param read by the sourcing scripts
@@ -229,6 +229,65 @@ faa_expand_text() {
       piece="$content"
     else
       piece="$(faa_expand_prose "$content")"$'\n'
+    fi
+    if [ "${FAA_STREAM:-0}" = "1" ]; then
+      printf '%s' "$piece" >&2
+    fi
+    printf '%s' "$piece"
+  done < <(printf '%s\n' "$text" | tr -d '\036' | faa_split_segments)
+}
+
+# Deterministic, model-free renderer for the v2 structured-field format
+# (bench/lean-plugin). Reads prose on stdin; any line beginning (after optional
+# leading whitespace) with DX:/EX:/ARCH: is expanded to full prose via a fixed
+# template — the connective boilerplate the model never had to generate. Fields
+# are separated by " | " (space-pipe-space), so a bare "a|b" operator or a
+# "< not <=" comparator inside a field is preserved untouched. Field content is
+# copied verbatim (numbers, comparators, inline code all exact); only labels and
+# sentence punctuation are added. 2–4 fields tolerated (unlabeled extras append
+# plainly). Non-prefixed lines pass through unchanged. No apfel, no network.
+faa_render_fields() {
+  awk '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+    {
+      head = $0; sub(/^[ \t]+/, "", head)
+      if      (head ~ /^DX:/)   { pfx = "DX";   body = substr(head, 4) }
+      else if (head ~ /^EX:/)   { pfx = "EX";   body = substr(head, 4) }
+      else if (head ~ /^ARCH:/) { pfx = "ARCH"; body = substr(head, 6) }
+      else { print; next }
+
+      if (pfx == "DX")      { lab[1] = "Diagnosis"; lab[2] = "Cause";    lab[3] = "Fix" }
+      else if (pfx == "EX") { lab[1] = "What";      lab[2] = "Why";      lab[3] = "How" }
+      else                  { lab[1] = "Pattern";   lab[2] = "Tradeoff"; lab[3] = "Recommendation" }
+      nlab = 3
+
+      n = split(body, fld, / \| /)
+      out = ""
+      for (i = 1; i <= n; i++) {
+        v = trim(fld[i]); sub(/\.$/, "", v)      # drop one trailing period for clean joins
+        if (v == "") continue
+        piece = (i <= nlab) ? lab[i] ": " v : v
+        out = (out == "") ? piece : out ". " piece
+      }
+      if (out != "") print out "."
+      else print                                  # nothing renderable — pass line through
+    }
+  '
+}
+
+# Full render pipeline: split into code/prose segments, render prose via
+# faa_render_fields, pass code through byte-identical. Mirrors faa_expand_text
+# but is deterministic and needs no apfel. With FAA_STREAM=1, mirrors each
+# segment to stderr as it completes.
+faa_render_text() {
+  local text="$1" seg type content piece
+  while IFS= read -r -d $'\x1e' seg; do
+    type=${seg:0:1}
+    content=${seg:1}
+    if [ "$type" = "C" ]; then
+      piece="$content"
+    else
+      piece="$(printf '%s' "$content" | faa_render_fields)"$'\n'
     fi
     if [ "${FAA_STREAM:-0}" = "1" ]; then
       printf '%s' "$piece" >&2

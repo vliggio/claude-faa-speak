@@ -4,7 +4,7 @@
 
 ## Checklist
 
-- [ ] `bash test/run.sh` passes (114 checks; no login or model needed — apfel is stubbed)
+- [ ] `bash test/run.sh` passes (132 checks; no login or model needed — apfel is stubbed)
 - [ ] `shellcheck` is clean on any touched scripts (CI enforces this)
 - [ ] Bash 3.2 compatible — no `mapfile`, no associative arrays (macOS default bash)
 - [ ] Dictionary changes follow the measurement gate in [docs/custom-dictionary.md](../docs/custom-dictionary.md) and pass the drift test (lib + SKILL.md + README tables must agree)
