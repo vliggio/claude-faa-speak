@@ -1,0 +1,9 @@
+{
+  "name": "faa-speak-lean",
+  "version": "0.2.0",
+  "description": "Benchmark-only v2 prototype: lean output rules (concise, diffs-not-rewrites, read-once, minimal round-trips, think-briefly) + optional structured fields with deterministic model-free render — no abbreviation dialect, no apfel",
+  "author": {
+    "name": "vliggio"
+  },
+  "license": "MIT"
+}
